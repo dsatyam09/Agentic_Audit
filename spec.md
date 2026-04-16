@@ -49,25 +49,37 @@ A clause removal scores SRS ≈ 4.0. A subtle language weakening scores SRS ≈ 
 
 ### Supported Regulations
 
-| Regulation | Namespace | Status | Focus Articles | Conflicting With |
+| Regulation | Namespace | Status | Articles indexed | Focus Articles |
 |---|---|---|---|---|
-| GDPR | `gdpr` | Active | Art. 5, 6, 7, 13, 14, 17, 25, 32, 33, 44 | HIPAA (data retention conflict — excluded) |
-| SOC 2 | `soc2` | Active | Trust Service Criteria: Security, Availability, Confidentiality, Processing Integrity, Privacy | — |
-| HIPAA | `hipaa` | Active (standalone only) | §164.306, §164.308, §164.310, §164.312, §164.314, §164.316 | GDPR (excluded from cross-regulation), SOC 2 (excluded from cross-regulation) |
-| ISO 27001 | `iso27001` | Planned | Annex A controls relevant to data handling | — |
+| GDPR (EU) | `gdpr` | Active | 10 | Art. 5, 6, 7, 13, 14, 17, 25, 32, 33, 44 |
+| HIPAA (US Health) | `hipaa` | Active | 144 | §164.306/308/310/312/316/404/408/502/524/530 |
+| NIST SP 800-53 | `nist` | Active | 324 | AC-2, AC-3, AU-2, IA-2, IR-4, RA-3, SC-8, SI-2, CM-6, CP-9 |
 
-### Cross-Regulation Rules (enforced at classifier level)
+### Regulation Routing by Document Type
 
-The following combinations are **explicitly excluded** due to direct contradictions in data retention and handling requirements:
-- `GDPR + HIPAA` — GDPR mandates erasure on request; HIPAA mandates retention minimums. Contradictory obligations cannot be jointly evaluated.
-- `HIPAA + SOC 2` — overlapping but conflicting definitions of PHI scope.
+The `ClassifierAgent` maps each document type to its natural regulation(s):
 
-**Permitted combinations:**
-- `GDPR + SOC 2` — complementary; SOC 2 Security criteria align with GDPR Art. 32
-- `GDPR + ISO 27001` — highly complementary; ISO controls map to GDPR technical requirements
-- `SOC 2 + ISO 27001` — complementary frameworks
+| doc_type | Default regulation_scope | Rationale |
+|---|---|---|
+| `privacy_policy` | `["gdpr"]` | EU personal data collection and processing |
+| `data_handling` | `["gdpr"]` | Data processing procedures |
+| `security_sop` | `["nist"]` | Security controls → NIST SP 800-53 |
+| `vendor_agreement` | `["hipaa"]` | Business Associate Agreements, PHI handling |
+| `breach_sop` | `["hipaa"]` | Breach notification requirements |
+| `other` | `["gdpr"]` | Safe default |
 
-The `ClassifierAgent` detects which regulations apply and enforces these exclusion rules before routing to evaluation.
+Multi-regulation is permitted when content genuinely spans domains
+(e.g., a security SOP processing EU personal data → `["gdpr", "nist"]`).
+
+### Cross-Regulation Exclusion
+
+**`GDPR + HIPAA` are mutually exclusive** — GDPR mandates erasure on request while
+HIPAA mandates minimum retention periods. Contradictory obligations cannot be
+jointly evaluated on the same document. If both are assigned, the classifier
+keeps only the one that best matches `doc_type`.
+
+**NIST can coexist with either GDPR or HIPAA** — it is a security framework, not
+a privacy/health law, so there is no conflict.
 
 ---
 
@@ -78,19 +90,22 @@ This structure is designed for evolution to a web application. `backend/` is the
 ```
 compliance-agent/
 │
-├── SPEC.md                          ← this file — the single source of truth
+├── spec.md                          ← this file — the single source of truth
 ├── README.md                        ← setup instructions
+├── architecture.md                  ← step-by-step system walkthrough
 ├── requirements.txt
 ├── .env.example
 ├── .env                             ← never commit
-├── run_evaluation.py                ← CLI entry point: runs all 4 experimental conditions
-├── run_pipeline.py                  ← CLI entry point: evaluate a single document
+├── run_pipeline.py                  ← CLI: python run_pipeline.py --doc <file>
+├── run_evaluation.py                ← CLI: evaluation harness (5 conditions)
 │
-├── backend/                         ← all Python logic; will become FastAPI app
+├── backend/                         ← all Python logic
 │   ├── __init__.py
 │   │
-│   ├── api/                         ← reserved for FastAPI routes (web phase)
-│   │   └── __init__.py
+│   ├── api/                         ← FastAPI layer (consumed by frontend)
+│   │   ├── __init__.py
+│   │   ├── main.py                  ← FastAPI app + CORS middleware
+│   │   └── routes.py                ← /health, /analyze, /reports, /regulations
 │   │
 │   ├── agents/
 │   │   ├── __init__.py
@@ -128,8 +143,9 @@ compliance-agent/
 │   │
 │   ├── reports/
 │   │   ├── __init__.py
-│   │   ├── assessment.py            ← AssessmentReport: generates POA&M Assessment Report
-│   │   ├── remediation.py           ← RemediationReport: generates POA&M Remediation Report
+│   │   ├── assessment.py            ← AssessmentReport: renders Jinja2 → Markdown string
+│   │   ├── remediation.py           ← RemediationReport: renders Jinja2 → Markdown string
+│   │   ├── pdf_renderer.py          ← markdown_to_pdf(): Markdown → HTML → PDF (xhtml2pdf)
 │   │   └── templates/
 │   │       ├── assessment.md.jinja  ← Jinja2 template for Assessment Report
 │   │       └── remediation.md.jinja ← Jinja2 template for Remediation Report
@@ -153,16 +169,12 @@ compliance-agent/
 ├── data/
 │   ├── compliance/                  ← regulation source data (JSON, indexed into Chroma)
 │   │   ├── gdpr/
-│   │   │   ├── gdpr_raw.json        ← scraped source: 99 articles + 173 recitals
-│   │   │   └── gdpr_articles.json   ← cleaned + enriched: 10 focus articles with severity + key_requirements
-│   │   ├── soc2/
-│   │   │   ├── soc2_raw.json        ← [to be added — same schema as gdpr_raw.json]
-│   │   │   └── soc2_articles.json   ← [generated by prepare_dataset.py]
+│   │   │   ├── gdpr_raw.json        ← 272 records (99 articles + 173 recitals)
+│   │   │   └── gdpr_articles.json   ← 10 focus articles, enriched with severity + key_requirements
 │   │   ├── hipaa/
-│   │   │   ├── hipaa_raw.json       ← [to be added]
-│   │   │   └── hipaa_articles.json  ← [generated by prepare_dataset.py]
-│   │   └── iso27001/
-│   │       └── .gitkeep             ← planned
+│   │   │   └── hipaa_articles.json  ← 144 CFR sections (§160/§164), indexed into Chroma
+│   │   └── nist/
+│   │       └── nist_articles.json   ← 324 NIST SP 800-53 controls, indexed into Chroma
 │   │
 │   ├── testing/                     ← all test documents and ground truth
 │   │   ├── documents/               ← enterprise docs for evaluation
@@ -170,17 +182,21 @@ compliance-agent/
 │   │   │   │   ├── compliant/       ← comp_001.pdf … comp_005.pdf
 │   │   │   │   ├── non_compliant/   ← nc_001.pdf … nc_005.pdf
 │   │   │   │   └── ambiguous/       ← amb_001.pdf … amb_005.pdf
-│   │   │   ├── soc2/
+│   │   │   ├── hipaa/
 │   │   │   │   ├── compliant/
 │   │   │   │   ├── non_compliant/
 │   │   │   │   └── ambiguous/
-│   │   │   └── multi_regulation/    ← GDPR+SOC2 and GDPR+ISO27001 docs only
-│   │   │       ├── gdpr_soc2/
-│   │   │       └── gdpr_iso27001/
+│   │   │   ├── nist/
+│   │   │   │   ├── compliant/
+│   │   │   │   ├── non_compliant/
+│   │   │   │   └── ambiguous/
+│   │   │   └── multi_regulation/    ← GDPR+NIST docs (HIPAA+GDPR is excluded by design)
+│   │   │       └── gdpr_nist/
 │   │   │
 │   │   └── ground_truth/
 │   │       ├── gdpr_annotations.json
-│   │       ├── soc2_annotations.json
+│   │       ├── hipaa_annotations.json
+│   │       ├── nist_annotations.json
 │   │       └── multi_annotations.json
 │   │
 │   └── chroma_db/                   ← Chroma persistent vector store (generated, gitignored)
@@ -189,8 +205,8 @@ compliance-agent/
 │   ├── reports/
 │   │   └── {doc_id}/
 │   │       ├── POA&M/
-│   │       │   ├── assessment_report.md
-│   │       │   └── remediation_report.md
+│   │       │   ├── assessment_report.pdf   ← rendered via xhtml2pdf
+│   │       │   └── remediation_report.pdf  ← rendered via xhtml2pdf
 │   │       └── raw/
 │   │           └── violation_report.json
 │   ├── logs/
@@ -317,8 +333,8 @@ Ground truth was extracted from Claude, GPT-4, and Gemini annotations with minim
 
 **Important constraints:**
 - All testing documents are synthetic — generated to have known compliance characteristics
-- No HIPAA+GDPR or HIPAA+SOC2 annotation files exist (excluded by design — see Section 2)
-- Multi-regulation annotations are in `multi_annotations.json` with `regulations: ["gdpr", "soc2"]`
+- No HIPAA+GDPR annotation files exist (excluded by design — see Section 2)
+- Multi-regulation annotations are in `multi_annotations.json` with `regulations: ["gdpr", "nist"]`
 
 ### 4.4 Adding a New Regulation
 
@@ -334,6 +350,8 @@ python scripts/prepare_dataset.py --regulation [reg]
 
 # 4. Index into Chroma
 python scripts/index_regulations.py --regulation [reg]
+# or index all at once:
+python scripts/index_regulations.py --all
 
 # 5. Update REGULATION_REGISTRY in backend/agents/classifier.py
 # 6. Add test documents to data/testing/documents/[reg]/
@@ -356,7 +374,7 @@ class DebateRecord(TypedDict):
     """Result of one full Advocate→Challenger→Arbiter debate round for a single (chunk, clause) pair."""
     article_id:              str
     article_title:           str
-    regulation:              str             # "gdpr" | "soc2" | "hipaa"
+    regulation:              str             # "gdpr" | "hipaa" | "nist"
     chunk_index:             int
     # Advocate output
     advocate_argument:       str
@@ -378,9 +396,9 @@ class DebateRecord(TypedDict):
     hallucination_flag:      bool            # True if cited_text claimed but not found verbatim
 
 class POAMReport(TypedDict):
-    """Paths to the two generated POA&M report files."""
-    assessment_report_path:  str            # outputs/reports/{doc_id}/POA&M/assessment_report.md
-    remediation_report_path: str            # outputs/reports/{doc_id}/POA&M/remediation_report.md
+    """Paths to the two generated POA&M PDF report files."""
+    assessment_report_path:  str            # outputs/reports/{doc_id}/POA&M/assessment_report.pdf
+    remediation_report_path: str            # outputs/reports/{doc_id}/POA&M/remediation_report.pdf
 
 class ComplianceState(TypedDict):
     # ── Input ──────────────────────────────────────────────────────────────
@@ -391,7 +409,7 @@ class ComplianceState(TypedDict):
 
     # ── Classifier output ──────────────────────────────────────────────────
     doc_type:                str             # "privacy_policy"|"security_sop"|"vendor_agreement"|"data_handling"|"breach_sop"|"other"
-    regulation_scope:        list[str]       # ["gdpr"] or ["gdpr","soc2"] — enforces exclusion matrix
+    regulation_scope:        list[str]       # ["gdpr"] or ["gdpr","nist"] — enforces exclusion matrix
     classifier_confidence:   float
     classifier_reasoning:    str
 
@@ -421,37 +439,48 @@ class ComplianceState(TypedDict):
 
 ### 6.1 ClassifierAgent (`backend/agents/classifier.py`)
 
-**Model:** `gpt-4o-mini` (one call per document — fast, cheap, does not benefit from debate)
+**Model:** Qwen (local) — same `QwenRunner` singleton used by debate agents. `thinking=False`, `max_new_tokens=256`.
 
 **Inputs:** `state["doc_text"][:1500]`, `state["doc_path"]`
 
 **Outputs written to state:** `doc_type`, `regulation_scope`, `classifier_confidence`, `classifier_reasoning`
 
 **Key logic:**
-1. Run few-shot classification prompt → get `{doc_type, regulation_scope, confidence, reasoning}`
-2. Apply exclusion matrix: if `regulation_scope` contains `["hipaa", "gdpr"]` or `["hipaa", "soc2"]`, remove the conflicting pair and set `regulation_scope` to the single most applicable regulation
-3. Log entry appended to `pipeline_log`
+1. Run few-shot classification prompt → parse JSON `{doc_type, regulation_scope, confidence, reasoning}`
+2. Filter to active regulations only (inactive namespaces are silently dropped)
+3. Apply exclusion matrix: if `regulation_scope` contains `["hipaa", "gdpr"]`, keep only the one that best matches `doc_type`
+4. Log entry appended to `pipeline_log`
 
 **Exclusion enforcement:**
 ```python
 EXCLUDED_COMBINATIONS = [
-    frozenset(["hipaa", "gdpr"]),
-    frozenset(["hipaa", "soc2"]),
+    frozenset(["hipaa", "gdpr"]),   # conflicting retention/consent requirements
 ]
 
-def enforce_exclusions(regulations: list[str]) -> list[str]:
+DOC_TYPE_PREFERENCE = {
+    "privacy_policy": "gdpr",
+    "data_handling":  "gdpr",
+    "security_sop":   "nist",
+    "vendor_agreement": "hipaa",
+    "breach_sop":     "hipaa",
+    "other":          "gdpr",
+}
+
+def enforce_exclusions(regulations: list[str], doc_type: str) -> list[str]:
     reg_set = set(regulations)
     for excluded in EXCLUDED_COMBINATIONS:
         if excluded.issubset(reg_set):
-            # Keep the more applicable one based on doc_type
-            # privacy_policy → prefer gdpr; healthcare → prefer hipaa
-            regulations = resolve_conflict(regulations, excluded)
+            regulations = resolve_conflict(regulations, excluded, doc_type)
+            reg_set = set(regulations)
     return regulations
 ```
 
 ### 6.2 RetrievalAgent (`backend/agents/retrieval_agent.py`)
 
 **No LLM call.** Pure vector search + reranking.
+
+**Embedder:** `sentence-transformers/all-MiniLM-L6-v2` (local, 384-dim) with SHA-256 in-memory cache.
+**Reranker:** `cross-encoder/ms-marco-MiniLM-L-6-v2` (local BGE cross-encoder).
 
 **Inputs:** `state["doc_chunks"]`, `state["regulation_scope"]`
 
@@ -461,11 +490,12 @@ def enforce_exclusions(regulations: list[str]) -> list[str]:
 ```python
 for chunk in state["doc_chunks"]:
     for regulation in state["regulation_scope"]:
+        col_size = vector_store.collection_size(regulation)
         results = retrieve_and_rerank(
             query=chunk["chunk_text"],
             namespace=regulation,
-            top_k_candidates=min(10, collection_size(regulation)),  # GDPR has 10 vectors
-            top_k_final=5
+            top_k_candidates=min(10, col_size),
+            top_k_final=min(5, col_size),
         )
     # Merge results across regulations, deduplicate by article_id
 ```
@@ -473,14 +503,14 @@ for chunk in state["doc_chunks"]:
 **`retrieve_and_rerank` function** (`backend/retrieval/vector_store.py`):
 ```python
 def retrieve_and_rerank(query: str, namespace: str, top_k_candidates: int, top_k_final: int) -> list[dict]:
-    embedding = embedder.embed(query)           # cached by SHA256(query)
-    candidates = chroma.query(
-        query_embeddings=[embedding],
+    embedding = embedder.embed(query)           # all-MiniLM-L6-v2, cached by SHA256(query)
+    candidates = vector_store.query(
+        namespace=namespace,
+        query_embedding=embedding,
         n_results=top_k_candidates,
-        where={"namespace": namespace}
     )
     pairs = [(query, doc) for doc in candidates["documents"][0]]
-    scores = reranker.predict(pairs)            # BGE cross-encoder
+    scores = reranker.predict(pairs)            # ms-marco cross-encoder
     ranked = sorted(zip(scores, candidates["documents"][0], candidates["metadatas"][0]), reverse=True)
     return [
         {"article_id": m["article_id"], "article_title": m["article_title"],
@@ -499,13 +529,14 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch, re
 
 class QwenRunner:
-    MODEL_ID = "Qwen/Qwen3-8B"
+    # Override via QWEN_MODEL_ID env var — e.g., Qwen/Qwen2.5-0.5B-Instruct for dev/testing
+    MODEL_ID = os.environ.get("QWEN_MODEL_ID", "Qwen/Qwen3-8B")
 
     def __init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.MODEL_ID)
         self.model = AutoModelForCausalLM.from_pretrained(
             self.MODEL_ID,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
             device_map="auto"           # GPU if available, else CPU
         )
         self.model.eval()
@@ -649,13 +680,17 @@ def compute_risk_score(canonical_records: list[DebateRecord]) -> tuple[float, st
 
 **Remediation generation:** One batched Qwen3-8B call for all violations. Prompt asks for 2-3 sentence remediation per violation with specific language to add.
 
+**Hallucination rate** is stored as a fraction in `[0.0, 1.0]` (e.g., `0.3333` = 33.3%). Display layers should multiply by 100 for percentage display.
+
 **POA&M report generation:**
 ```python
-def generate_poam(violation_report: dict, doc_id: str) -> POAMReport:
-    """Renders both Jinja2 templates and writes files to outputs/reports/{doc_id}/POA&M/"""
-    assessment_path = f"outputs/reports/{doc_id}/POA&M/assessment_report.md"
-    remediation_path = f"outputs/reports/{doc_id}/POA&M/remediation_report.md"
-    # ... render templates, write files
+def generate_poam(violation_report: dict, debate_records: list, state: dict, doc_id: str) -> POAMReport:
+    """Renders both Jinja2 templates → Markdown strings → PDF via pdf_renderer.markdown_to_pdf()"""
+    # Files written to outputs/reports/{doc_id}/POA&M/
+    assessment_path  = f"outputs/reports/{doc_id}/POA&M/assessment_report.pdf"
+    remediation_path = f"outputs/reports/{doc_id}/POA&M/remediation_report.pdf"
+    # assessment.py + remediation.py render Jinja2 → Markdown
+    # pdf_renderer.markdown_to_pdf() converts Markdown → styled HTML → PDF (xhtml2pdf + reportlab)
     return POAMReport(assessment_report_path=assessment_path, remediation_report_path=remediation_path)
 ```
 
@@ -665,7 +700,7 @@ def generate_poam(violation_report: dict, doc_id: str) -> POAMReport:
 
 The system generates two reports per document run, placed in `outputs/reports/{doc_id}/POA&M/`.
 
-### 7.1 Assessment Report (`assessment_report.md`)
+### 7.1 Assessment Report (`assessment_report.pdf`)
 
 The Assessment Report is the comprehensive audit finding. It contains:
 
@@ -758,7 +793,7 @@ Hallucination rate: {rate}%
 {arbiter reasoning + verdict}
 ```
 
-### 7.2 Remediation Report (`remediation_report.md`)
+### 7.2 Remediation Report (`remediation_report.pdf`)
 
 The Remediation Report is the actionable follow-up. It contains:
 
@@ -864,7 +899,7 @@ All inter-component data structures. Do not deviate.
     }
   ],
   "hallucination_flags": 0,
-  "hallucination_rate": 0.0,
+  "hallucination_rate": 0.0,              // fraction in [0.0, 1.0] — NOT a percentage
   "generated_at": "2025-04-11T14:32:01Z",
   "model": "Qwen/Qwen3-8B",
   "regulation_versions": {"gdpr": "2016/679 — last checked 2025-04-01"}
@@ -997,27 +1032,38 @@ CRITICAL: cited_text must be copied verbatim from the policy section above. If c
 ```
 Classify this enterprise document and identify which compliance regulations apply.
 
+Supported regulations: gdpr (EU personal data), hipaa (US health data / PHI), nist (security controls — NIST SP 800-53).
+Rules:
+- gdpr: EU personal data collection, processing, consent, data-subject rights, privacy policies.
+- hipaa: US protected health information (PHI), covered entities, BAAs, breach notification.
+- nist: Security SOPs, access control policies, incident response, system security plans.
+- gdpr + nist can appear together (e.g., security SOP that also processes EU personal data).
+- hipaa and gdpr are mutually exclusive (conflicting retention/consent rules).
+
 Examples:
 Document: "This Privacy Policy describes how Acme Corp collects and uses personal data of EU residents..."
 → {"doc_type": "privacy_policy", "regulation_scope": ["gdpr"], "confidence": 0.95, "reasoning": "EU personal data processing — GDPR applies."}
 
-Document: "This Security SOP defines incident response and access control procedures..."
-→ {"doc_type": "security_sop", "regulation_scope": ["gdpr", "soc2"], "confidence": 0.85, "reasoning": "Security procedures relevant to GDPR Art. 32 and SOC 2 Security criteria."}
+Document: "This Security SOP defines incident response and access control procedures for our systems..."
+→ {"doc_type": "security_sop", "regulation_scope": ["nist"], "confidence": 0.88, "reasoning": "Security procedures align with NIST SP 800-53 controls (IR-4, AC-2, AU-2)."}
 
 Document: "This Business Associate Agreement covers PHI handling between covered entities..."
-→ {"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI — HIPAA applies. Note: GDPR excluded due to retention policy conflict."}
+→ {"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI — HIPAA applies. GDPR excluded due to conflict."}
+
+Document: "This Data Handling SOP governs EU employee data stored on our secure infrastructure..."
+→ {"doc_type": "data_handling", "regulation_scope": ["gdpr", "nist"], "confidence": 0.84, "reasoning": "EU personal data (GDPR) stored on auditable secure systems (NIST)."}
 
 Classify:
 {doc_snippet}
 Filename: {doc_path}
 
 Output ONLY JSON:
-{{"doc_type": "privacy_policy|security_sop|vendor_agreement|data_handling|breach_sop|other", "regulation_scope": ["gdpr"|"soc2"|"hipaa"|"iso27001"], "confidence": 0.0-1.0, "reasoning": "1-2 sentences"}}
+{{"doc_type": "privacy_policy|security_sop|vendor_agreement|data_handling|breach_sop|other", "regulation_scope": ["gdpr"|"hipaa"|"nist"], "confidence": 0.0-1.0, "reasoning": "1-2 sentences"}}
 ```
 
 ### Remediation Prompt
 ```
-You are a GDPR/compliance consultant. A compliance audit has identified these violations.
+You are a compliance consultant. A compliance audit has identified these violations.
 For each violation, write the exact language that should be added to the policy document.
 
 VIOLATIONS:
@@ -1046,15 +1092,15 @@ REGULATION_SOURCES = {
         "parser": "gdpr_parser",
         "check_interval_hours": 24
     },
-    "soc2": {
-        "url": "https://www.aicpa.org/resources/article/soc-2-reporting-on-an-examination-of-controls",
-        "parser": "soc2_parser",
-        "check_interval_hours": 168   # weekly
-    },
     "hipaa": {
-        "url": "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html",
+        "url": "https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C",
         "parser": "hipaa_parser",
-        "check_interval_hours": 168
+        "check_interval_hours": 168   # weekly — CFR updates are infrequent
+    },
+    "nist": {
+        "url": "https://csrc.nist.gov/projects/cprt/catalog",
+        "parser": "nist_parser",
+        "check_interval_hours": 720   # monthly — SP 800-53 revisions are rare
     }
 }
 

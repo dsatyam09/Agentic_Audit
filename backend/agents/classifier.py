@@ -13,41 +13,67 @@ REGULATION_REGISTRY = {
     "gdpr": {
         "namespace": "gdpr",
         "status": "active",
-        "focus_articles": ["art_5", "art_6", "art_7", "art_13", "art_14",
-                           "art_17", "art_25", "art_32", "art_33", "art_44"],
-    },
-    "soc2": {
-        "namespace": "soc2",
-        "status": "active",
-        "focus_articles": [],
+        "focus_articles": [
+            "art_5", "art_6", "art_7", "art_13", "art_14",
+            "art_17", "art_25", "art_32", "art_33", "art_44",
+        ],
     },
     "hipaa": {
         "namespace": "hipaa",
         "status": "active",
-        "focus_articles": [],
+        # Key sections from HIPAA Security Rule (§164.3xx), Breach Notification (§164.4xx),
+        # and Privacy Rule (§164.5xx) most commonly evaluated in enterprise audits.
+        "focus_articles": [
+            "hipaa_164_306",   # Security standards: General rules
+            "hipaa_164_308",   # Administrative safeguards
+            "hipaa_164_310",   # Physical safeguards
+            "hipaa_164_312",   # Technical safeguards
+            "hipaa_164_316",   # Policies and procedures
+            "hipaa_164_404",   # Breach notification to individuals
+            "hipaa_164_408",   # Notification to the Secretary
+            "hipaa_164_502",   # Uses and disclosures of PHI: General rules
+            "hipaa_164_524",   # Access of individuals to PHI
+            "hipaa_164_530",   # Administrative requirements (Privacy Rule)
+        ],
     },
-    "iso27001": {
-        "namespace": "iso27001",
-        "status": "planned",
-        "focus_articles": [],
+    "nist": {
+        "namespace": "nist",
+        "status": "active",
+        # Selected NIST SP 800-53 controls spanning the most-audited families:
+        # AC (Access Control), AU (Audit), IA (Identity), IR (Incident Response),
+        # RA (Risk), SC (System/Comms Protection), SI (System Integrity), CM, CP.
+        "focus_articles": [
+            "nist_ac-2",   # Account Management
+            "nist_ac-3",   # Access Enforcement
+            "nist_au-2",   # Event Logging
+            "nist_ia-2",   # Identification and Authentication
+            "nist_ir-4",   # Incident Handling
+            "nist_ra-3",   # Risk Assessment
+            "nist_sc-8",   # Transmission Confidentiality and Integrity
+            "nist_si-2",   # Flaw Remediation
+            "nist_cm-6",   # Configuration Settings
+            "nist_cp-9",   # System Backup
+        ],
     },
 }
 
 # ── Cross-regulation exclusion matrix ────────────────────────────────────────
 
 EXCLUDED_COMBINATIONS = [
+    # HIPAA (US health law) and GDPR (EU data law) have conflicting retention
+    # and consent requirements — evaluating both on the same document gives
+    # contradictory findings and confuses remediation.
     frozenset(["hipaa", "gdpr"]),
-    frozenset(["hipaa", "soc2"]),
 ]
 
-# Maps doc_type → preferred regulation when a conflict must be resolved
+# Maps doc_type → preferred regulation when an exclusion conflict must be resolved
 DOC_TYPE_PREFERENCE = {
-    "privacy_policy": "gdpr",
-    "data_handling": "gdpr",
-    "security_sop": "soc2",
-    "vendor_agreement": "hipaa",
-    "breach_sop": "hipaa",
-    "other": "gdpr",
+    "privacy_policy": "gdpr",       # EU personal-data focus
+    "data_handling": "gdpr",        # data processing focus
+    "security_sop": "nist",         # security procedures → NIST SP 800-53
+    "vendor_agreement": "hipaa",    # BAAs and PHI handling
+    "breach_sop": "hipaa",          # breach notification requirements
+    "other": "gdpr",                # safe default
 }
 
 
@@ -74,22 +100,33 @@ def enforce_exclusions(regulations: list[str], doc_type: str) -> list[str]:
 
 CLASSIFIER_PROMPT = """Classify this enterprise document and identify which compliance regulations apply.
 
+Supported regulations: gdpr (EU personal data), hipaa (US health data / PHI), nist (security controls — NIST SP 800-53).
+Rules:
+- gdpr: EU personal data collection, processing, consent, data-subject rights, privacy policies.
+- hipaa: US protected health information (PHI), covered entities, BAAs, breach notification.
+- nist: Security SOPs, access control policies, incident response, system security plans.
+- gdpr + nist can appear together (e.g., security SOP that also processes EU personal data).
+- hipaa and gdpr are mutually exclusive (conflicting retention/consent rules).
+
 Examples:
 Document: "This Privacy Policy describes how Acme Corp collects and uses personal data of EU residents..."
 → {{"doc_type": "privacy_policy", "regulation_scope": ["gdpr"], "confidence": 0.95, "reasoning": "EU personal data processing — GDPR applies."}}
 
-Document: "This Security SOP defines incident response and access control procedures..."
-→ {{"doc_type": "security_sop", "regulation_scope": ["gdpr", "soc2"], "confidence": 0.85, "reasoning": "Security procedures relevant to GDPR Art. 32 and SOC 2 Security criteria."}}
+Document: "This Security SOP defines incident response and access control procedures for our systems..."
+→ {{"doc_type": "security_sop", "regulation_scope": ["nist"], "confidence": 0.88, "reasoning": "Security procedures align with NIST SP 800-53 controls (IR-4, AC-2, AU-2)."}}
 
 Document: "This Business Associate Agreement covers PHI handling between covered entities..."
-→ {{"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI — HIPAA applies. Note: GDPR excluded due to retention policy conflict."}}
+→ {{"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI — HIPAA applies. GDPR excluded due to conflict."}}
+
+Document: "This Data Handling SOP governs EU employee data stored on our secure infrastructure..."
+→ {{"doc_type": "data_handling", "regulation_scope": ["gdpr", "nist"], "confidence": 0.84, "reasoning": "EU personal data (GDPR) stored on auditable secure systems (NIST)."}}
 
 Classify:
 {doc_snippet}
 Filename: {doc_path}
 
 Output ONLY JSON:
-{{"doc_type": "privacy_policy|security_sop|vendor_agreement|data_handling|breach_sop|other", "regulation_scope": ["gdpr"|"soc2"|"hipaa"|"iso27001"], "confidence": 0.0-1.0, "reasoning": "1-2 sentences"}}"""
+{{"doc_type": "privacy_policy|security_sop|vendor_agreement|data_handling|breach_sop|other", "regulation_scope": ["gdpr"|"hipaa"|"nist"], "confidence": 0.0-1.0, "reasoning": "1-2 sentences"}}"""
 
 
 def classifier_node(state: ComplianceState) -> dict:

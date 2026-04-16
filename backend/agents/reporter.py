@@ -204,31 +204,30 @@ def generate_poam(
     state: dict,
     doc_id: str,
 ) -> POAMReport:
-    """Render both Jinja2 templates and write files to outputs/reports/{doc_id}/POA&M/.
+    """Render both Jinja2 templates and write PDF files to outputs/reports/{doc_id}/POA&M/.
 
     Returns
     -------
     POAMReport
-        Paths to the two generated report files.
+        Paths to the two generated PDF report files.
     """
     from backend.reports.assessment import render_assessment_report
     from backend.reports.remediation import render_remediation_report
+    from backend.reports.pdf_renderer import markdown_to_pdf
 
     assessment_dir = _PROJECT_ROOT / "outputs" / "reports" / doc_id / "POA&M"
     os.makedirs(assessment_dir, exist_ok=True)
 
-    assessment_path = str(assessment_dir / "assessment_report.md")
-    remediation_path = str(assessment_dir / "remediation_report.md")
+    assessment_path = str(assessment_dir / "assessment_report.pdf")
+    remediation_path = str(assessment_dir / "remediation_report.pdf")
 
-    # Render assessment report
+    # Render assessment report markdown then convert to PDF
     assessment_md = render_assessment_report(violation_report, debate_records, state)
-    with open(assessment_path, "w", encoding="utf-8") as fh:
-        fh.write(assessment_md)
+    markdown_to_pdf(assessment_md, assessment_path)
 
-    # Render remediation report
+    # Render remediation report markdown then convert to PDF
     remediation_md = render_remediation_report(violation_report, state)
-    with open(remediation_path, "w", encoding="utf-8") as fh:
-        fh.write(remediation_md)
+    markdown_to_pdf(remediation_md, remediation_path)
 
     return POAMReport(
         assessment_report_path=assessment_path,

@@ -2,8 +2,9 @@
 
 Usage:
     python scripts/index_regulations.py --regulation gdpr
-    python scripts/index_regulations.py --regulation soc2
     python scripts/index_regulations.py --regulation hipaa
+    python scripts/index_regulations.py --regulation nist
+    python scripts/index_regulations.py --all
 """
 
 import json
@@ -67,12 +68,21 @@ def index_regulation(regulation: str) -> None:
     print(f"  Collection size: {vector_store.collection_size(regulation)}")
 
 
+SUPPORTED_REGULATIONS = ["gdpr", "hipaa", "nist"]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Index regulation articles into Chroma")
-    parser.add_argument("--regulation", required=True,
-                        choices=["gdpr", "soc2", "hipaa", "iso27001"])
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--regulation", choices=SUPPORTED_REGULATIONS,
+                       help="Index a single regulation namespace")
+    group.add_argument("--all", action="store_true",
+                       help="Index all supported regulations")
     args = parser.parse_args()
-    index_regulation(args.regulation)
+
+    targets = SUPPORTED_REGULATIONS if args.all else [args.regulation]
+    for reg in targets:
+        index_regulation(reg)
 
 
 if __name__ == "__main__":
