@@ -1,6 +1,8 @@
 """DebateAgent: LangGraph node that orchestrates the adversarial debate for all (chunk, clause) pairs.
 
 Calls DebateProtocol.run_debate for each pair and collects DebateRecords.
+Respects the ``thinking_enabled`` flag in state so the same node powers both
+the C4 (think ON) and C4-nothink (think OFF) ablation conditions.
 """
 
 from backend.agents.state import ComplianceState, DebateRecord
@@ -12,6 +14,8 @@ from backend.logging.pipeline_log import make_log_entry
 def debate_node(state: ComplianceState) -> dict:
     """LangGraph node: runs adversarial debate for every (chunk, clause) pair."""
     retrieved_clauses = state["retrieved_clauses"]
+    thinking = state.get("thinking_enabled", True)
+
     debate_records: list[DebateRecord] = []
     log_entries = []
 
@@ -26,16 +30,17 @@ def debate_node(state: ComplianceState) -> dict:
                 clause=clause,
                 chunk_index=chunk_index,
                 qwen_runner=qwen,
+                thinking=thinking,
             )
             debate_records.append(record)
 
-            # Log each debate round
             log = make_log_entry(
                 agent="debate",
                 input_data={
                     "chunk_index": chunk_index,
                     "article_id": clause["article_id"],
                     "regulation": clause["regulation"],
+                    "thinking_enabled": thinking,
                 },
                 raw_prompt=None,
                 thinking_trace=record.get("arbiter_thinking", ""),

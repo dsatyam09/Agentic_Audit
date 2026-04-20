@@ -1,0 +1,59 @@
+{
+  "gdpr_compliant_streamvibe": {
+    "pdf": "gdpr_compliant_streamvibe_annotation_gpt.pdf",
+    "compliance_level": "fully compliant",
+    "verdicts": {
+      "art_5": "Full",
+      "art_6": "Full",
+      "art_7": "Full",
+      "art_13": "Full",
+      "art_14": "Full",
+      "art_17": "Full",
+      "art_25": "Full",
+      "art_32": "Full",
+      "art_33": "Full",
+      "art_44": "Full"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf",
+    "doc_stem": "gdpr_compliant_streamvibe",
+    "annotation_source": "gdpr_compliant_streamvibe_annotation_gpt.pdf"
+  },
+  "gdpr_partial_known_quickdeals": {
+    "pdf": "gdpr_partial_known_quickdeals_annotation_gpt.pdf",
+    "compliance_level": "partially compliant \u2014 known violations",
+    "verdicts": {
+      "art_5": "Full",
+      "art_6": "Missing",
+      "art_7": "Full",
+      "art_13": "Missing",
+      "art_14": "Missing",
+      "art_17": "Missing",
+      "art_25": "Full",
+      "art_32": "Partial",
+      "art_33": "Full",
+      "art_44": "Full"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/gdpr/articles/gdpr_partial_known_quickdeals.pdf",
+    "doc_stem": "gdpr_partial_known_quickdeals",
+    "annotation_source": "gdpr_partial_known_quickdeals_annotation_gpt.pdf"
+  },
+  "gdpr_partial_tricky_novasphere": {
+    "pdf": "gdpr_partial_tricky_novasphere_annotation_gpt.pdf",
+    "compliance_level": "partially compliant \u2014 tricky/unseen violations",
+    "verdicts": {
+      "art_5": "Full",
+      "art_6": "Missing",
+      "art_7": "Missing",
+      "art_13": "Full",
+      "art_14": "Partial",
+      "art_17": "Full",
+      "art_25": "Full",
+      "art_32": "Full",
+      "art_33": "Full",
+      "art_44": "Partial"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/gdpr/articles/gdpr_partial_tricky_novasphere.pdf",
+    "doc_stem": "gdpr_partial_tricky_novasphere",
+    "annotation_source": "gdpr_partial_tricky_novasphere_annotation_gpt.pdf"
+  }
+}

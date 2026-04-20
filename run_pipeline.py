@@ -26,6 +26,10 @@ def main():
         "--previous-report", default=None,
         help="Path to a previous violation_report.json for drift detection"
     )
+    parser.add_argument(
+        "--no-thinking", action="store_true",
+        help="Disable Qwen <think> reasoning (C4-nothink ablation condition)",
+    )
     args = parser.parse_args()
 
     doc_path = str(Path(args.doc).resolve())
@@ -40,20 +44,24 @@ def main():
             print(f"Error: Previous report not found: {previous_report_path}")
             sys.exit(1)
 
+    thinking = not args.no_thinking
+
     print(f"Starting compliance evaluation pipeline...")
     print(f"  Document: {doc_path}")
+    print(f"  Thinking enabled: {thinking}")
     if previous_report_path:
         print(f"  Previous report: {previous_report_path} (drift detection enabled)")
     print()
 
     from backend.graph import run_pipeline
-    final_state = run_pipeline(doc_path, previous_report_path)
+    final_state = run_pipeline(doc_path, previous_report_path, thinking=thinking)
 
     # Print summary
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")
     print("=" * 60)
     print(f"  Document ID:      {final_state['doc_id']}")
+    print(f"  Filename:         {final_state.get('doc_filename', '—')}")
     print(f"  Document Type:    {final_state['doc_type']}")
     print(f"  Regulations:      {', '.join(final_state['regulation_scope'])}")
     print(f"  Risk Score:       {final_state['risk_score']} / 4.0")

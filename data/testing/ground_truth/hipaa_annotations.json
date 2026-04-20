@@ -1,0 +1,59 @@
+{
+  "hipaa_compliant_clearwater": {
+    "pdf": "hipaa_compliant_clearwater_annotation_gpt.pdf",
+    "compliance_level": "fully compliant",
+    "verdicts": {
+      "hipaa_164_306": "Full",
+      "hipaa_164_308": "Full",
+      "hipaa_164_310": "Full",
+      "hipaa_164_312": "Full",
+      "hipaa_164_316": "Full",
+      "hipaa_164_404": "Full",
+      "hipaa_164_408": "Full",
+      "hipaa_164_502": "Full",
+      "hipaa_164_524": "Full",
+      "hipaa_164_530": "Full"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/hipaa/articles/hipaa_compliant_clearwater.pdf",
+    "doc_stem": "hipaa_compliant_clearwater",
+    "annotation_source": "hipaa_compliant_clearwater_annotation_gpt.pdf"
+  },
+  "hipaa_partial_known_sunrise": {
+    "pdf": "hipaa_partial_known_sunrise_annotation_gpt.pdf",
+    "compliance_level": "partially compliant \u2014 known violations",
+    "verdicts": {
+      "hipaa_164_306": "Full",
+      "hipaa_164_308": "Full",
+      "hipaa_164_310": "Full",
+      "hipaa_164_312": "Partial",
+      "hipaa_164_316": "Full",
+      "hipaa_164_404": "Missing",
+      "hipaa_164_408": "Missing",
+      "hipaa_164_502": "Missing",
+      "hipaa_164_524": "Full",
+      "hipaa_164_530": "Full"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/hipaa/articles/hipaa_partial_known_sunrise.pdf",
+    "doc_stem": "hipaa_partial_known_sunrise",
+    "annotation_source": "hipaa_partial_known_sunrise_annotation_gpt.pdf"
+  },
+  "hipaa_partial_tricky_pinnacle": {
+    "pdf": "hipaa_partial_tricky_pinnacle_annotation_gpt.pdf",
+    "compliance_level": "partially compliant \u2014 tricky/unseen violations",
+    "verdicts": {
+      "hipaa_164_306": "Full",
+      "hipaa_164_308": "Full",
+      "hipaa_164_310": "Full",
+      "hipaa_164_312": "Full",
+      "hipaa_164_316": "Full",
+      "hipaa_164_404": "Full",
+      "hipaa_164_408": "Full",
+      "hipaa_164_502": "Partial",
+      "hipaa_164_524": "Full",
+      "hipaa_164_530": "Full"
+    },
+    "article_pdf": "/Users/satyam/Personal/Projects/Agentic_Audit/test_datasets/hipaa/articles/hipaa_partial_tricky_pinnacle.pdf",
+    "doc_stem": "hipaa_partial_tricky_pinnacle",
+    "annotation_source": "hipaa_partial_tricky_pinnacle_annotation_gpt.pdf"
+  }
+}

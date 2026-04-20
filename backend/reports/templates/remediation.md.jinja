@@ -1,6 +1,9 @@
 # Compliance Remediation Report
 
-**Document:** {{ doc_id }}
+**Document:** {{ doc_filename or doc_id }}
+{% if doc_filename and doc_id -%}
+**Document ID:** {{ doc_id }}
+{% endif -%}
 **Regulation(s):** {{ regulation_scope }}
 **Based On Assessment:** {{ generated_at }}
 **Priority:** {{ risk_level }}
@@ -19,12 +22,32 @@ Estimated remediation effort: {{ effort_estimate }}
 ## Remediation Actions
 
 {% for v in actions %}
-### ACTION-{{ "%03d" | format(loop.index) }} [{{ v.risk_level | upper }}] — {{ v.article_id }}: {{ v.article_title }}
+### ACTION-{{ "%03d" | format(loop.index) }} [{{ v.risk_level | upper }}] — {{ v.article_id | upper }}: {{ v.article_title }}
 
-**Current State:** {{ v.verdict }} — {{ v.reasoning }}
+**Regulation:** {{ v.regulation | upper }}
+**Current Coverage:** {{ v.verdict }}
+
+{% if v.clause_text %}
+**Regulatory Requirement:**
+{{ v.clause_text }}
+
+{% endif %}
+{% if v.key_requirements %}
+**Key Requirements the document must satisfy:**
+{% for kr in v.key_requirements %}
+- {{ kr }}
+{% endfor %}
+
+{% endif %}
+**Auditor Finding:**
+{{ v.reasoning }}
 
 **Gap Identified:**
+{% if v.challenger_gap %}
 {{ v.challenger_gap }}
+{% else %}
+No specific challenger gap recorded; see finding above.
+{% endif %}
 
 **Required Action:**
 {% if v.remediation %}
@@ -32,14 +55,15 @@ Add the following language to the relevant section of the document:
 
 > {{ v.remediation }}
 {% else %}
-Review and update the document to explicitly address the requirements of {{ v.article_id }} ({{ v.article_title }}).
+Review and update the document to explicitly address the requirements of {{ v.article_id | upper }} ({{ v.article_title }}).
 {% endif %}
 
 **Acceptance Criteria:**
-The remediated document must satisfy:
-- [ ] {{ v.article_id }} ({{ v.article_title }}) achieves Full coverage upon re-evaluation
-- [ ] Cited text in the document explicitly addresses the identified gap
-- [ ] No hallucination flags raised on re-assessment
+- [ ] {{ v.article_id | upper }} ({{ v.article_title }}) achieves Full coverage upon re-evaluation.
+{% for kr in (v.key_requirements or []) %}
+- [ ] Document explicitly covers: {{ kr }}.
+{% endfor %}
+- [ ] Cited text verbatim present in the document (no hallucination flags).
 
 ---
 
@@ -48,12 +72,12 @@ The remediated document must satisfy:
 ## Re-evaluation Checklist
 
 After applying remediations, re-run the pipeline on the updated document.
-Expected outcome: risk_score < 1.0 (Low risk level).
+Expected outcome: `risk_score < 1.0` (Low risk level).
 
-- [ ] All ACTION items above have been addressed in the updated document
-- [ ] Updated document has been re-ingested into the pipeline
-- [ ] Re-assessment confirms risk_score improvement
-- [ ] No new regressions introduced by remediation changes
+- [ ] All ACTION items above have been addressed in the updated document.
+- [ ] Updated document has been re-ingested into the pipeline.
+- [ ] Re-assessment confirms risk_score improvement.
+- [ ] No new regressions introduced by remediation changes.
 
 ---
 

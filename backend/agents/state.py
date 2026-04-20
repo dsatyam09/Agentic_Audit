@@ -12,7 +12,7 @@ class DebateRecord(TypedDict):
     """Result of one full Advocate→Challenger→Arbiter debate round for a single (chunk, clause) pair."""
     article_id: str
     article_title: str
-    regulation: str                     # "gdpr" | "soc2" | "hipaa"
+    regulation: str                     # "gdpr" | "hipaa" | "nist"
     chunk_index: int
     # Advocate output
     advocate_argument: str
@@ -42,14 +42,19 @@ class POAMReport(TypedDict):
 
 class ComplianceState(TypedDict):
     # ── Input ──────────────────────────────────────────────────────────────
-    doc_id: str
-    doc_path: str
+    doc_id: str                         # sha256(doc_path)[:12] — short stable identifier
+    doc_path: str                       # absolute filesystem path
+    doc_filename: str                   # basename of doc_path (shown in reports)
+    doc_sha256: str                     # sha256 of document *contents* (full hex)
     doc_text: str
     doc_chunks: list[dict]              # [{chunk_index, chunk_text, char_start, char_end}]
 
+    # ── Run-mode flags ─────────────────────────────────────────────────────
+    thinking_enabled: bool              # C4 vs C4-nothink ablation toggle
+
     # ── Classifier output ──────────────────────────────────────────────────
     doc_type: str                       # "privacy_policy"|"security_sop"|"vendor_agreement"|"data_handling"|"breach_sop"|"other"
-    regulation_scope: list[str]         # ["gdpr"] or ["gdpr","soc2"] — enforces exclusion matrix
+    regulation_scope: list[str]         # ["gdpr"] or ["gdpr","nist"] — enforces exclusion matrix
     classifier_confidence: float
     classifier_reasoning: str
 

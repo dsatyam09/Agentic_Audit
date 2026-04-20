@@ -76,41 +76,52 @@ def list_regulations():
 # ---------------------------------------------------------------------------
 
 @router.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(file: UploadFile = File(...), thinking: bool = True):
     """Upload a document and run the full compliance pipeline.
 
     Accepts PDF, DOCX, or TXT.  Returns a summary and the doc_id so the
     caller can fetch the full report via GET /reports/{doc_id}.
+
+    Set ``thinking=false`` as a query param to run the C4-nothink ablation.
     """
-    suffix = Path(file.filename or "upload").suffix.lower()
+    original_filename = file.filename or "upload"
+    suffix = Path(original_filename).suffix.lower()
     if suffix not in {".pdf", ".docx", ".txt"}:
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type '{suffix}'. Accepted: .pdf, .docx, .txt",
         )
 
-    # Write upload to a temp file so the pipeline can read it
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    # Preserve the original filename so it appears in the generated reports
+    # rather than a random tmp name.
+    tmp_dir = tempfile.mkdtemp(prefix="agentic_audit_")
+    tmp_path = os.path.join(tmp_dir, original_filename)
+    with open(tmp_path, "wb") as fh:
+        fh.write(await file.read())
 
     try:
         from backend.graph import run_pipeline
-        state = run_pipeline(tmp_path)
+        state = run_pipeline(tmp_path, thinking=thinking)
     finally:
-        os.unlink(tmp_path)
+        try:
+            os.unlink(tmp_path)
+            os.rmdir(tmp_dir)
+        except OSError:
+            pass
 
     doc_id = state["doc_id"]
     vr = state.get("violation_report", {})
 
     return {
         "doc_id": doc_id,
+        "doc_filename": state.get("doc_filename", original_filename),
         "doc_type": state.get("doc_type"),
         "regulations": state.get("regulation_scope", []),
         "risk_score": state.get("risk_score"),
         "risk_level": state.get("risk_level"),
         "articles_evaluated": vr.get("articles_evaluated"),
         "hallucination_rate": vr.get("hallucination_rate"),
+        "thinking_enabled": vr.get("thinking_enabled", thinking),
         "assessment_report_url": f"/api/v1/reports/{doc_id}/assessment",
         "remediation_report_url": f"/api/v1/reports/{doc_id}/remediation",
     }
@@ -130,6 +141,22 @@ def get_report(doc_id: str):
         return JSONResponse(content=json.load(fh))
 
 
+def _download_filename(doc_id: str, kind: str) -> str:
+    """Prefer the original document's stem + kind + doc_id for download names."""
+    raw_path = _REPORTS_DIR / doc_id / "raw" / "violation_report.json"
+    stem = doc_id
+    if raw_path.exists():
+        try:
+            with open(raw_path, encoding="utf-8") as fh:
+                vr = json.load(fh)
+            original = vr.get("doc_filename", "")
+            if original:
+                stem = Path(original).stem or doc_id
+        except (json.JSONDecodeError, OSError):
+            pass
+    return f"{stem}_{kind}_{doc_id}.pdf"
+
+
 @router.get("/reports/{doc_id}/assessment")
 def get_assessment_pdf(doc_id: str):
     """Download the Assessment PDF report."""
@@ -139,7 +166,7 @@ def get_assessment_pdf(doc_id: str):
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
-        filename=f"assessment_report_{doc_id}.pdf",
+        filename=_download_filename(doc_id, "assessment"),
     )
 
 
@@ -152,7 +179,7 @@ def get_remediation_pdf(doc_id: str):
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
-        filename=f"remediation_report_{doc_id}.pdf",
+        filename=_download_filename(doc_id, "remediation"),
     )
 
 

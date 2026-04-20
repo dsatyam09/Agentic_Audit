@@ -1,10 +1,17 @@
 # Compliance Assessment Report
 
-**Document:** {{ doc_id }} — {{ doc_type }}
+**Document:** {{ doc_filename or doc_id }}
+{% if doc_filename and doc_id -%}
+**Document ID:** {{ doc_id }}
+{% endif -%}
+{% if doc_sha256 -%}
+**Content SHA-256:** `{{ doc_sha256[:16] }}…`
+{% endif -%}
+**Document Type:** {{ doc_type }}
 **Regulation(s):** {{ regulation_scope }}
 **Assessment Date:** {{ generated_at }}
 **Overall Risk Score:** {{ risk_score }} / 4.0 ({{ risk_level }})
-**Assessed By:** AI Compliance Monitoring Agent v1.0
+**Assessed By:** AI Compliance Monitoring Agent v1.0 (Thinking: {{ "ON" if thinking_enabled else "OFF" }})
 
 ---
 
@@ -17,36 +24,58 @@
 ## Assessment Methodology
 
 - **Evaluation Protocol:** Adversarial Debate Protocol (Advocate → Challenger → Arbiter)
-- **Model:** Qwen/Qwen3-8B with explicit reasoning traces
+{% if thinking_enabled -%}
+- **Model:** {{ model }} with explicit `<think>` reasoning traces
+{%- else -%}
+- **Model:** {{ model }} with reasoning disabled (ablation condition)
+{%- endif %}
+- **Retrieval:** RAG with cross-encoder reranking (ms-marco-MiniLM-L-6-v2)
 {% for reg, version in regulation_versions.items() %}
-- **{{ reg | upper }} Version:** {{ version }}
+- **{{ reg | upper }} corpus fingerprint:** `{{ version[:16] }}…`
 {% endfor %}
-- **Retrieval:** RAG with BGE cross-encoder reranking
 
 ---
 
 ## Article-by-Article Findings
 
 {% for v in violations %}
-### {{ v.article_id }} — {{ v.article_title }} [{{ v.risk_level }}] — Coverage: {{ v.verdict }}
+### {{ v.article_id | upper }} — {{ v.article_title }} [{{ v.risk_level }}] — Coverage: {{ v.verdict }}
 
 **Regulatory Requirement:**
-{{ v.article_id | upper }} — {{ v.article_title }}
+{% if v.clause_text %}
+{{ v.clause_text }}
+{% else %}
+_{{ v.article_id | upper }} — {{ v.article_title }}_
+{% endif %}
+
+{% if v.key_requirements %}
+**Key Requirements Checklist:**
+{% for kr in v.key_requirements %}
+- [ ] {{ kr }}
+{% endfor %}
+{% endif %}
 
 **Evidence Found:**
 {% if v.final_cited_text %}
 > "{{ v.final_cited_text }}"
 {% else %}
-> No supporting language found.
+> No supporting language found in the document.
 {% endif %}
-
-**Debate Summary:**
-{{ v.debate_summary }}
 
 **Finding:**
 {{ v.reasoning }}
 
-**Hallucination Flag:** {{ v.hallucination_flag }}
+{% if v.challenger_gap %}
+**Identified Gap:**
+{{ v.challenger_gap }}
+{% endif %}
+
+{% if v.debate_summary and v.debate_summary != v.reasoning %}
+**Debate Summary:**
+{{ v.debate_summary }}
+{% endif %}
+
+**Hallucination Flag:** {{ "Yes — cited evidence did not appear verbatim in the document; verdict downgraded." if v.hallucination_flag else "No" }}
 
 ---
 
@@ -57,7 +86,7 @@
 | Article | Title | Coverage | Risk Level | SRS |
 |---------|-------|----------|------------|-----|
 {% for v in violations %}
-| {{ v.article_id }} | {{ v.article_title }} | {{ v.verdict }} | {{ v.risk_level }} | {% if drift_result %}{% for reg in drift_result.get('regressions', []) %}{% if reg.article_id == v.article_id %}{{ reg.semantic_regression_score }}{% endif %}{% endfor %}{% else %}—{% endif %} |
+| {{ v.article_id }} | {{ v.article_title }} | {{ v.verdict }} | {{ v.risk_level }} | {% if drift_result %}{% set found_srs = namespace(value='—') %}{% for reg in drift_result.get('regressions', []) %}{% if reg.article_id == v.article_id %}{% set found_srs.value = reg.semantic_regression_score %}{% endif %}{% endfor %}{{ found_srs.value }}{% else %}—{% endif %} |
 {% endfor %}
 
 ---
@@ -68,18 +97,48 @@
 - **Flagged evaluations:** {{ hallucination_flags }}
 - **Hallucination rate:** {{ (hallucination_rate * 100) | round(1) }}%
 
+Flagged evaluations are cases where the arbiter cited policy text that did
+not appear verbatim in the document. Such citations are stripped from this
+report and the corresponding coverage is downgraded accordingly.
+
 ---
+
+{% if drift_result %}
+## Compliance Drift vs. Prior Assessment
+
+- **Previous assessment:** {{ drift_result.get("v1_assessed_at", "unknown date") }}
+- **Current assessment:** {{ drift_result.get("v2_assessed_at", generated_at) }}
+- **Risk score delta:** {{ drift_result.get("risk_score_delta", 0.0) }} ({{ drift_result.get("risk_score_v1", 0.0) }} → {{ drift_result.get("risk_score_v2", 0.0) }})
+- **Regressions detected:** {{ drift_result.get("regression_count", 0) }}
+- **Improvements:** {{ drift_result.get("improvements", []) | length }}
+
+{% if drift_result.get("regressions") %}
+| Article | From | To | Risk | Semantic Dist. | SRS |
+|---------|------|----|------|----------------|-----|
+{% for reg in drift_result.get("regressions", []) %}
+| {{ reg.article_id }} | {{ reg.from_coverage }} | {{ reg.to_coverage }} | {{ reg.risk_level }} | {{ reg.semantic_distance }} | {{ reg.semantic_regression_score }} |
+{% endfor %}
+{% endif %}
+
+{% if drift_result.get("critical_regressions") %}
+**Critical regressions requiring immediate action:** {{ drift_result.get("critical_regressions") | join(", ") }}
+{% endif %}
+
+---
+{% endif %}
 
 ## Appendix: Full Debate Transcripts
 
 {% for rec in debate_records %}
-### Debate: {{ rec.article_id }} — Chunk {{ rec.chunk_index }}
+### Debate: {{ rec.article_id | upper }} — Chunk {{ rec.chunk_index }}
 
 **Advocate Thinking Trace:**
 {% if rec.advocate_thinking %}
+```
 {{ rec.advocate_thinking }}
+```
 {% else %}
-_No thinking trace recorded._
+_No thinking trace recorded (thinking may have been disabled for this run)._
 {% endif %}
 
 **Advocate Argument:**
@@ -87,7 +146,9 @@ _No thinking trace recorded._
 
 **Challenger Thinking Trace:**
 {% if rec.challenger_thinking %}
+```
 {{ rec.challenger_thinking }}
+```
 {% else %}
 _No thinking trace recorded._
 {% endif %}
@@ -95,16 +156,24 @@ _No thinking trace recorded._
 **Challenger Argument:**
 {{ rec.challenger_argument }}
 
+{% if rec.challenger_gap %}
+**Challenger Gap Identified:**
+{{ rec.challenger_gap }}
+{% endif %}
+
 **Arbiter Thinking Trace:**
 {% if rec.arbiter_thinking %}
+```
 {{ rec.arbiter_thinking }}
+```
 {% else %}
 _No thinking trace recorded._
 {% endif %}
 
-**Arbiter Verdict:**
+**Arbiter Verdict:** {{ rec.verdict }} | **Risk Level:** {{ rec.risk_level }}
+
+**Arbiter Reasoning:**
 {{ rec.reasoning }}
-**Coverage:** {{ rec.verdict }} | **Risk Level:** {{ rec.risk_level }}
 
 ---
 

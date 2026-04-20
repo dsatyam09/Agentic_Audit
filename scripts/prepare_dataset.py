@@ -2,8 +2,8 @@
 
 Usage:
     python scripts/prepare_dataset.py --regulation gdpr
-    python scripts/prepare_dataset.py --regulation soc2
     python scripts/prepare_dataset.py --regulation hipaa
+    python scripts/prepare_dataset.py --regulation nist
 """
 
 import json
@@ -81,52 +81,6 @@ GDPR_FOCUS_ARTICLES = {
     ]},
 }
 
-SOC2_FOCUS_ARTICLES = {
-    "cc6_1": {"severity": "Critical", "key_requirements": [
-        "logical and physical access controls",
-        "access provisioning based on role",
-        "access revocation process",
-    ]},
-    "cc6_2": {"severity": "High", "key_requirements": [
-        "authentication mechanisms",
-        "multi-factor authentication for remote access",
-    ]},
-    "cc6_3": {"severity": "High", "key_requirements": [
-        "access authorization based on business need",
-        "periodic access review",
-    ]},
-    "cc7_1": {"severity": "Critical", "key_requirements": [
-        "monitoring of system components",
-        "detection of anomalies and vulnerabilities",
-    ]},
-    "cc7_2": {"severity": "Critical", "key_requirements": [
-        "incident response procedures",
-        "incident classification and prioritization",
-    ]},
-    "cc8_1": {"severity": "High", "key_requirements": [
-        "change management process",
-        "testing before deployment",
-        "authorization of changes",
-    ]},
-    "a1_1": {"severity": "High", "key_requirements": [
-        "availability commitments documented",
-        "system capacity management",
-    ]},
-    "c1_1": {"severity": "High", "key_requirements": [
-        "confidentiality commitments",
-        "data classification scheme",
-    ]},
-    "pi1_1": {"severity": "Medium", "key_requirements": [
-        "processing integrity commitments",
-        "data validation controls",
-    ]},
-    "p1_1": {"severity": "High", "key_requirements": [
-        "privacy notice provided",
-        "consent obtained where required",
-        "personal information handling procedures",
-    ]},
-}
-
 HIPAA_FOCUS_ARTICLES = {
     "164_308_a1": {"severity": "Critical", "key_requirements": [
         "security management process",
@@ -192,12 +146,6 @@ REGULATION_CONFIG = {
         "raw_file": "data/compliance/gdpr/gdpr_raw.json",
         "output_file": "data/compliance/gdpr/gdpr_articles.json",
         "id_prefix": "art_",
-    },
-    "soc2": {
-        "focus_articles": SOC2_FOCUS_ARTICLES,
-        "raw_file": "data/compliance/soc2/soc2_raw.json",
-        "output_file": "data/compliance/soc2/soc2_articles.json",
-        "id_prefix": "",
     },
     "hipaa": {
         "focus_articles": HIPAA_FOCUS_ARTICLES,

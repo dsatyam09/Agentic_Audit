@@ -85,142 +85,135 @@ a privacy/health law, so there is no conflict.
 
 ## 3. Repository Structure
 
-This structure is designed for evolution to a web application. `backend/` is the API layer boundary. `frontend/` is reserved but empty now. All core logic lives in `backend/`.
+`backend/` holds all Python logic and exposes a FastAPI layer at `backend/api/`. `frontend/` is empty and reserved for the teammate building the React/Next.js UI. Everything below reflects the actual on-disk layout.
 
 ```
-compliance-agent/
+Agentic_Audit/
 │
 ├── spec.md                          ← this file — the single source of truth
-├── README.md                        ← setup instructions
+├── README.md                        ← brief setup instructions
 ├── architecture.md                  ← step-by-step system walkthrough
 ├── requirements.txt
-├── .env.example
-├── .env                             ← never commit
-├── run_pipeline.py                  ← CLI: python run_pipeline.py --doc <file>
-├── run_evaluation.py                ← CLI: evaluation harness (5 conditions)
+├── .env                             ← never commit (QWEN_MODEL_ID, AGENTIC_AUDIT_CORS_ORIGINS, …)
+├── run_pipeline.py                  ← CLI: python run_pipeline.py --doc <file> [--no-thinking]
+├── run_evaluation.py                ← CLI: legacy evaluation harness (5 conditions)
 │
 ├── backend/                         ← all Python logic
 │   ├── __init__.py
 │   │
 │   ├── api/                         ← FastAPI layer (consumed by frontend)
-│   │   ├── __init__.py
 │   │   ├── main.py                  ← FastAPI app + CORS middleware
-│   │   └── routes.py                ← /health, /analyze, /reports, /regulations
+│   │   └── routes.py                ← /api/v1/{health,regulations,analyze,reports,...}
 │   │
 │   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── state.py                 ← ComplianceState TypedDict — NEVER change without updating this spec
-│   │   ├── classifier.py            ← ClassifierAgent: doc type + regulation routing
-│   │   ├── retrieval_agent.py       ← RetrievalAgent: RAG + cross-encoder
-│   │   ├── advocate.py              ← AdvocateAgent: argues compliance (Qwen3-8B)
-│   │   ├── challenger.py            ← ChallengerAgent: argues non-compliance (Qwen3-8B)
-│   │   ├── arbiter.py               ← ArbiterAgent: final verdict (Qwen3-8B)
-│   │   └── reporter.py              ← ReporterAgent: risk scoring + POA&M generation
+│   │   ├── state.py                 ← ComplianceState TypedDict — DO NOT change without updating this spec
+│   │   ├── classifier.py            ← doc_type + regulation routing + REGULATION_REGISTRY
+│   │   ├── retrieval_agent.py       ← RAG node (chunk → top-k articles)
+│   │   ├── debate_agent.py          ← orchestrates DebateProtocol over (chunk, article) pairs
+│   │   └── reporter.py              ← split into reporter_compute_node + reporter_render_node
 │   │
 │   ├── debate/
-│   │   ├── __init__.py
-│   │   ├── protocol.py              ← DebateProtocol: orchestrates Advocate→Challenger→Arbiter
-│   │   └── qwen_runner.py           ← QwenRunner: Qwen3-8B loader + /think interface (singleton)
+│   │   ├── protocol.py              ← Advocate / Challenger / Arbiter prompts + run_debate()
+│   │   └── qwen_runner.py           ← Qwen singleton (configurable via QWEN_MODEL_ID)
 │   │
-│   ├── graph.py                     ← LangGraph StateGraph: wires all agents into a pipeline
+│   ├── graph.py                     ← LangGraph StateGraph + run_pipeline(doc_path, ...)
 │   │
 │   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── parser.py                ← DocumentParser: PDF/DOCX/TXT → plain text
-│   │   └── chunker.py               ← DocumentChunker: text → 512-token chunks, 50-token overlap
+│   │   ├── parser.py                ← PDF / DOCX / TXT → plain text (PyMuPDF, python-docx)
+│   │   └── chunker.py               ← 512-token windows, 50-token overlap (tiktoken)
 │   │
 │   ├── retrieval/
-│   │   ├── __init__.py
-│   │   ├── embedder.py              ← Embedder: text-embedding-3-small wrapper + SHA256 cache
-│   │   ├── vector_store.py          ← VectorStore: Chroma client, upsert, query, namespace mgmt
-│   │   └── reranker.py              ← Reranker: BGE cross-encoder (cross-encoder/ms-marco-MiniLM-L-6-v2)
+│   │   ├── embedder.py              ← all-MiniLM-L6-v2 (384-dim) + SHA-256 cache
+│   │   ├── vector_store.py          ← Chroma client, one collection per regulation namespace
+│   │   └── reranker.py              ← cross-encoder/ms-marco-MiniLM-L-6-v2
 │   │
 │   ├── regulation/
-│   │   ├── __init__.py
-│   │   ├── watcher.py               ← RegulationWatcher: polls sources, detects structural changes
-│   │   ├── differ.py                ← RegulationDiffer: semantic diff between article versions
-│   │   └── changelog.py             ← RegulationChangelog: SQLite table tracking all updates
+│   │   ├── watcher.py               ← RegulationWatcher: polls EUR-Lex / eCFR / NIST CPRT
+│   │   ├── differ.py                ← semantic diff between article versions
+│   │   └── changelog.py             ← SQLite table tracking all updates
 │   │
 │   ├── reports/
-│   │   ├── __init__.py
-│   │   ├── assessment.py            ← AssessmentReport: renders Jinja2 → Markdown string
-│   │   ├── remediation.py           ← RemediationReport: renders Jinja2 → Markdown string
-│   │   ├── pdf_renderer.py          ← markdown_to_pdf(): Markdown → HTML → PDF (xhtml2pdf)
+│   │   ├── assessment.py            ← renders assessment_report.md via Jinja2
+│   │   ├── remediation.py           ← renders remediation_report.md via Jinja2
+│   │   ├── pdf_renderer.py          ← markdown_to_pdf() — Markdown → HTML → PDF (xhtml2pdf)
 │   │   └── templates/
-│   │       ├── assessment.md.jinja  ← Jinja2 template for Assessment Report
-│   │       └── remediation.md.jinja ← Jinja2 template for Remediation Report
+│   │       ├── assessment.md.jinja
+│   │       └── remediation.md.jinja
 │   │
 │   ├── drift/
-│   │   ├── __init__.py
-│   │   └── detector.py              ← DriftDetector: SRS computation, regression surfacing
+│   │   └── detector.py              ← Semantic Regression Score + drift_node
 │   │
 │   ├── logging/
-│   │   ├── __init__.py
-│   │   └── pipeline_log.py          ← PipelineLogger: SQLite writer, captures thinking traces
+│   │   └── pipeline_log.py          ← SQLite writer (outputs/pipeline_logs.db) + JSON sidecar
 │   │
 │   └── evaluation/
-│       ├── __init__.py
-│       ├── metrics.py               ← compute_metrics: Precision, Recall, F1, Cohen's Kappa
-│       └── ragas_runner.py          ← RAGASRunner: Faithfulness + Answer Relevance
+│       └── metrics.py               ← compute_metrics: Precision, Recall, F1, Cohen's Kappa
 │
-├── frontend/                        ← reserved for React/Next.js web UI (future phase)
+├── frontend/                        ← reserved for React/Next.js (see Section 19)
 │   └── .gitkeep
 │
 ├── data/
-│   ├── compliance/                  ← regulation source data (JSON, indexed into Chroma)
+│   ├── compliance/                  ← regulation source data (indexed into Chroma)
 │   │   ├── gdpr/
-│   │   │   ├── gdpr_raw.json        ← 272 records (99 articles + 173 recitals)
-│   │   │   └── gdpr_articles.json   ← 10 focus articles, enriched with severity + key_requirements
+│   │   │   ├── gdpr_raw.json        ← 272 records (articles + recitals)
+│   │   │   └── gdpr_articles.json   ← 10 focus articles, enriched
 │   │   ├── hipaa/
-│   │   │   └── hipaa_articles.json  ← 144 CFR sections (§160/§164), indexed into Chroma
-│   │   └── nist/
-│   │       └── nist_articles.json   ← 324 NIST SP 800-53 controls, indexed into Chroma
-│   │
-│   ├── testing/                     ← all test documents and ground truth
-│   │   ├── documents/               ← enterprise docs for evaluation
-│   │   │   ├── gdpr/
-│   │   │   │   ├── compliant/       ← comp_001.pdf … comp_005.pdf
-│   │   │   │   ├── non_compliant/   ← nc_001.pdf … nc_005.pdf
-│   │   │   │   └── ambiguous/       ← amb_001.pdf … amb_005.pdf
-│   │   │   ├── hipaa/
-│   │   │   │   ├── compliant/
-│   │   │   │   ├── non_compliant/
-│   │   │   │   └── ambiguous/
-│   │   │   ├── nist/
-│   │   │   │   ├── compliant/
-│   │   │   │   ├── non_compliant/
-│   │   │   │   └── ambiguous/
-│   │   │   └── multi_regulation/    ← GDPR+NIST docs (HIPAA+GDPR is excluded by design)
-│   │   │       └── gdpr_nist/
-│   │   │
-│   │   └── ground_truth/
-│   │       ├── gdpr_annotations.json
-│   │       ├── hipaa_annotations.json
-│   │       ├── nist_annotations.json
-│   │       └── multi_annotations.json
+│   │   │   └── hipaa_articles.json  ← 144 CFR sections (§160/§164)
+│   │   ├── nist/
+│   │   │   └── nist_articles.json   ← 324 SP 800-53 controls
+│   │   ├── soc2/                    ← reserved (placeholder, not yet indexed)
+│   │   └── iso27001/                ← reserved (placeholder, not yet indexed)
 │   │
 │   └── chroma_db/                   ← Chroma persistent vector store (generated, gitignored)
 │
-├── outputs/                         ← all generated outputs (gitignored except structure)
+├── test_datasets/                   ← evaluation inputs + ground-truth annotation PDFs
+│   ├── gdpr/
+│   │   ├── articles/                ← gdpr_compliant_streamvibe.pdf, gdpr_partial_known_quickdeals.pdf, …
+│   │   └── annotations/             ← {doc_stem}_annotation_{claude|gpt|gemini}.pdf
+│   ├── hipaa/
+│   │   ├── articles/                ← hipaa_compliant_clearwater.pdf, …
+│   │   └── annotations/
+│   ├── soc2/                        ← reserved (placeholder)
+│   ├── gdpr_soc2_combined/          ← reserved
+│   └── hipaa_soc2_combined/         ← reserved
+│
+├── outputs/                         ← all generated outputs (gitignored)
 │   ├── reports/
-│   │   └── {doc_id}/
+│   │   └── {doc_id}/                ← doc_id = sha256(abs_doc_path)[:12]
 │   │       ├── POA&M/
-│   │       │   ├── assessment_report.pdf   ← rendered via xhtml2pdf
-│   │       │   └── remediation_report.pdf  ← rendered via xhtml2pdf
+│   │       │   ├── assessment_report.pdf
+│   │       │   └── remediation_report.pdf
 │   │       └── raw/
 │   │           └── violation_report.json
 │   ├── logs/
-│   │   └── {doc_id}_{run_id}.json   ← full pipeline log with thinking traces
+│   │   └── {doc_id}_{run_id}.json   ← per-run pipeline log with thinking traces
+│   ├── pipeline_logs.db             ← SQLite, all runs aggregated
 │   ├── drift/
-│   │   └── {doc_id}_drift_{timestamp}.json
-│   └── evaluation/
-│       └── evaluation_summary.json
+│   │   └── {doc_id}_drift_{ts}.json
+│   └── POA&M/                       ← evaluation harness outputs (per-doc + aggregate)
+│       ├── _semantic_evaluation.json
+│       ├── _evaluation_report.json
+│       ├── EVALUATION_TABLES.md
+│       ├── EVALUATION_TABLES.pdf
+│       ├── EVALUATION_TABLES_landscape.pdf
+│       └── {doc_stem}/
+│           ├── violation_report.json
+│           ├── metrics.json
+│           ├── semantic_metrics.json
+│           ├── assessment_report.pdf
+│           └── remediation_report.pdf
 │
 └── scripts/
-    ├── prepare_dataset.py            ← filter + enrich raw regulation JSON → articles.json
-    ├── index_regulations.py          ← embed articles.json → Chroma (run once per regulation)
-    ├── generate_docs.py              ← generate synthetic enterprise docs (for testing)
-    └── annotate_ground_truth.py      ← CLI annotation helper
+    ├── prepare_dataset.py           ← raw regulation JSON → enriched articles.json
+    ├── index_regulations.py         ← embed articles.json → Chroma (run once per regulation)
+    ├── generate_docs.py             ← synthetic enterprise document generator
+    ├── annotate_ground_truth.py     ← CLI annotation helper
+    ├── parse_annotations.py         ← extract Full/Partial/Missing labels from annotation PDFs
+    ├── batch_evaluate.py            ← run pipeline across every doc in test_datasets/
+    ├── compute_full_metrics.py      ← attach RAGAS proxies + classification metrics post-hoc
+    ├── enrich_metrics.py            ← recompute retrieval recall from pipeline_logs.db
+    ├── evaluate_semantic.py         ← deterministic semantic-similarity judge (PRIMARY evaluator)
+    └── generate_tables.py           ← emits EVALUATION_TABLES.{md,pdf} (6-table presentation report)
 ```
 
 ---
@@ -301,40 +294,58 @@ GDPR_SEVERITY = {
 
 ### 4.3 Ground Truth Annotation Format
 
-Ground truth was extracted from Claude, GPT-4, and Gemini annotations with minimal disagreement between models. Annotations are stored per regulation.
+Ground truth lives as **annotation PDFs** (one per LLM annotator: Claude, GPT-4, Gemini) under `test_datasets/{reg}/annotations/`. These PDFs use a structured format — each finding tagged `[VIOLATION]`, `[CONCERN]`, or `[COMPLIANT]` with article references — and are parsed at evaluation time by `scripts/parse_annotations.py`.
 
-**File:** `data/testing/ground_truth/{reg}_annotations.json`
-
-```json
-[
-  {
-    "doc_id": "nc_001",
-    "doc_path": "data/testing/documents/gdpr/non_compliant/nc_001.pdf",
-    "regulation": "gdpr",
-    "doc_type": "privacy_policy",
-    "annotations": {
-      "art_5":  {"label": "Partial", "notes": "purpose limitation stated, storage limitation missing"},
-      "art_6":  {"label": "Missing", "notes": "no lawful basis anywhere"},
-      "art_7":  {"label": "Missing", "notes": "consent withdrawal not addressed"},
-      "art_13": {"label": "Full",    "notes": "clear notice at point of collection"},
-      "art_14": {"label": "Missing", "notes": "third-party data not addressed"},
-      "art_17": {"label": "Missing", "notes": "right to erasure not mentioned"},
-      "art_25": {"label": "Partial", "notes": "vague mention of privacy by design"},
-      "art_32": {"label": "Missing", "notes": "no technical security measures described"},
-      "art_33": {"label": "Missing", "notes": "no breach notification process"},
-      "art_44": {"label": "Full",    "notes": "states data stays in EU"}
-    },
-    "annotation_sources": ["claude", "gpt4", "gemini"],
-    "inter_model_kappa": 0.81,
-    "agreed_at": "2025-04-01"
-  }
-]
+**Layout:**
+```
+test_datasets/
+├── gdpr/
+│   ├── articles/
+│   │   ├── gdpr_compliant_streamvibe.pdf
+│   │   ├── gdpr_partial_known_quickdeals.pdf
+│   │   └── gdpr_partial_tricky_novasphere.pdf
+│   └── annotations/
+│       ├── gdpr_compliant_streamvibe_annotation_claude.pdf
+│       ├── gdpr_compliant_streamvibe_annotation_gpt.pdf
+│       ├── gdpr_compliant_streamvibe_annotation_gemini.pdf
+│       ├── gdpr_partial_known_quickdeals_annotation_claude.pdf
+│       └── …
+└── hipaa/  (same structure: hipaa_compliant_clearwater, hipaa_partial_known_sunrise, hipaa_partial_tricky_pinnacle)
 ```
 
+**Parsed verdict map** (in-memory schema produced by `parse_annotations.py`):
+```python
+{
+    "doc_stem": "gdpr_partial_known_quickdeals",
+    "regulation": "gdpr",
+    "verdicts": {
+        "art_5":  "Partial",
+        "art_6":  "Missing",
+        "art_7":  "Missing",
+        "art_13": "Full",
+        "art_14": "Missing",
+        "art_17": "Missing",
+        "art_25": "Partial",
+        "art_32": "Missing",
+        "art_33": "Missing",
+        "art_44": "Full",
+    },
+    "annotators": ["claude", "gpt4", "gemini"],
+    "majority_verdict_used": True,
+}
+```
+
+**Parsing rules** (`scripts/parse_annotations.py`):
+- A "Fully Compliant" header on the annotation PDF → every focus article defaults to `Full`.
+- Otherwise scan `Finding N: [TAG] …` blocks. `[VIOLATION]` → `Missing`, `[CONCERN]` → `Partial`, `[COMPLIANT]` → `Full`.
+- Article references are extracted with regex: `Art. 13(1)(a)` → `art_13`; `45 CFR 164.520` → `hipaa_164_520`. Ranges (`Art. 15-22`) expand to every integer.
+- Each focus article receives the **worst** verdict among its mentions; unmentioned focus articles default to `Full`.
+- The three annotators are reconciled by majority vote across models (ties broken by worst verdict).
+
 **Important constraints:**
-- All testing documents are synthetic — generated to have known compliance characteristics
-- No HIPAA+GDPR annotation files exist (excluded by design — see Section 2)
-- Multi-regulation annotations are in `multi_annotations.json` with `regulations: ["gdpr", "nist"]`
+- All testing documents are synthetic — generated to have known compliance characteristics.
+- No HIPAA+GDPR combined documents exist (excluded by design — see Section 2).
+- SOC 2 / ISO 27001 / multi-regulation document sets exist as empty placeholders awaiting future annotation.
 
 ### 4.4 Adding a New Regulation
 
@@ -1347,9 +1358,57 @@ def detect_drift(report_v1: dict, report_v2: dict) -> dict:
 
 ---
 
-## 14. Evaluation Harness (`run_evaluation.py`)
+## 14. Evaluation Harness
 
-Four experimental conditions run against all test documents. Same ground truth for all.
+The evaluation pipeline has two layers: a **scripted harness** that runs the full debate pipeline across `test_datasets/` and a **semantic-similarity judge** that scores results against ground truth without relying on the production debate verdict (so the judge stays diagnostic even when the underlying LLM regresses).
+
+### 14.1 Workflow
+
+```
+test_datasets/{reg}/articles/*.pdf
+            │
+            ▼
+   scripts/batch_evaluate.py        ← runs backend.graph.run_pipeline on every doc,
+            │                          copies POA&M PDFs + violation_report.json
+            │                          into outputs/POA&M/{doc_stem}/, writes metrics.json
+            ▼
+   scripts/compute_full_metrics.py  ← attaches RAGAS proxies, classification metrics,
+            │                          and system-performance numbers per doc
+            │                          → outputs/POA&M/_evaluation_report.json
+            ▼
+   scripts/enrich_metrics.py        ← (optional) recomputes retrieval-recall metrics
+            │                          from outputs/pipeline_logs.db
+            ▼
+   scripts/evaluate_semantic.py     ← PRIMARY judge — sentence-transformer cosine + rule-based
+            │                          classifier; produces per-doc semantic_metrics.json and
+            │                          outputs/POA&M/_semantic_evaluation.json
+            ▼
+   scripts/generate_tables.py       ← renders the 6-table presentation report
+                                       (Retrieval × Clause × Report) × (GDPR × HIPAA)
+                                       → EVALUATION_TABLES.{md,pdf} + landscape PDF
+```
+
+Run all five scripts in order to regenerate every artifact under `outputs/POA&M/`. The semantic judge is independent of `batch_evaluate.py` and can be re-run alone whenever the ground-truth annotations change.
+
+### 14.2 Semantic Judge (`scripts/evaluate_semantic.py`)
+
+The semantic judge replaces the broken Qwen-0.5B baseline (which collapsed every verdict to `Missing`). It uses `sentence-transformers/all-MiniLM-L6-v2` cosine similarity between policy chunks and each focus article's `key_requirements`, then applies regulation-specific thresholds:
+
+```python
+THRESH = {
+    "gdpr":  {"full_mean": 0.42, "full_cov": 0.55, "partial_mean": 0.33, "partial_cov": 0.25},
+    "hipaa": {"full_mean": 0.38, "full_cov": 0.50, "partial_mean": 0.30, "partial_cov": 0.20},
+}
+```
+
+A rule-based keyword classifier provides the doc-type / regulation routing fallback (this is what brings classifier accuracy from 50% → 100% versus the 0.5B model). The judge emits Full/Partial/Missing verdicts plus reformulated RAGAS proxies expressed as **hit-rate fractions** (not raw cosine means):
+
+- `faithfulness` = fraction of assertive verdicts whose evidence cosine ≥ 0.30
+- `answer_relevance` = fraction of articles where the mean top-similarity ≥ 0.30
+- `context_precision` = fraction of articles where best-evidence cosine ≥ 0.40
+- `hallucination_rate` = fraction of Full/Partial verdicts where evidence < 0.30
+
+### 14.3 Experimental Conditions (legacy `run_evaluation.py`)
 
 | ID | Description | LLM | RAG | Rerank | Debate |
 |---|---|---|---|---|---|
@@ -1363,96 +1422,100 @@ Four experimental conditions run against all test documents. Same ground truth f
 - C2 vs C1 → RAG grounding value
 - C3 vs C2 → cross-encoder reranking value
 - C4 vs C3 → adversarial debate value
-- C4 vs C4-nothink → Qwen3 thinking trace value
+- C4 vs C4-nothink → Qwen3 thinking-trace value
 
-**Metrics computed:**
+The toggle for C4-nothink is the `--no-thinking` flag on `run_pipeline.py` (or `thinking=false` on `POST /api/v1/analyze`).
+
+### 14.4 Metrics
+
+Three classification perspectives are reported per regulation, since label imbalance (~77% Full, ~15% Missing, ~8% Partial in the n=60 article-level set) makes any single view misleading:
+
 ```python
-def compute_metrics(predictions: dict, ground_truth: dict) -> dict:
+def compute_metrics(predictions, ground_truth):
     """
-    predictions: {doc_id: {article_id: verdict_label}}
-    ground_truth: {doc_id: {article_id: label}}
-    Binary: Full = compliant (positive), Partial/Missing = non-compliant (negative)
+    predictions: {doc_stem: {article_id: "Full"|"Partial"|"Missing"}}
+    ground_truth: same shape, parsed from annotation PDFs.
+    Returns three views:
+      • Full-as-positive          (compliance certification view)
+      • Non-compliant-as-positive (audit-finding view — operationally important)
+      • Macro-averaged 3-class    (label-balanced)
+    Plus exact-match accuracy and Cohen's Kappa.
     """
-    tp = fp = fn = 0
-    for doc_id in ground_truth:
-        for art_id in ground_truth[doc_id]:
-            gt   = ground_truth[doc_id][art_id]["label"]
-            pred = predictions.get(doc_id, {}).get(art_id, "Missing")
-            gt_pos, pred_pos = (gt == "Full"), (pred == "Full")
-            if gt_pos and pred_pos:       tp += 1
-            elif pred_pos and not gt_pos: fp += 1
-            elif gt_pos and not pred_pos: fn += 1
-    p = tp / (tp + fp) if tp + fp else 0.0
-    r = tp / (tp + fn) if tp + fn else 0.0
-    f = 2 * p * r / (p + r) if p + r else 0.0
-    return {"precision": round(p, 3), "recall": round(r, 3), "f1": round(f, 3), "tp": tp, "fp": fp, "fn": fn}
 ```
 
-Additional metrics:
-- **RAGAS Faithfulness** (C2, C3, C4): target ≥ 0.80
-- **RAGAS Answer Relevance** (C2, C3, C4): target ≥ 0.75
-- **Hallucination rate**: `hallucination_flags / total_debate_evaluations`
-- **Debate consistency**: % where Arbiter aligns with the correct side (Advocate or Challenger) per ground truth
+Additional metrics surfaced in `EVALUATION_TABLES.md`:
+
+- **RAGAS Faithfulness** — target ≥ 0.85 (rubric value)
+- **RAGAS Answer Relevance** — target ≥ 0.80
+- **RAGAS Context Precision** — target ≥ 0.75
+- **Hallucination rate** — `hallucination_flags / total_debate_evaluations` (also reported as a fraction in `[0.0, 1.0]` in `violation_report.json`)
+- **Likert report-quality score** — 1-4: 4 = all artifacts present + 0 hallucinations; 3 = all + ≤10% hall; 2 = missing artifact or ≤25%; 1 = severe.
+- **Debate consistency** (legacy) — % where Arbiter aligns with the side that matches ground truth.
 
 ---
 
 ## 15. Environment Setup
 
 ### Requirements (`requirements.txt`)
-```
-torch>=2.2.0
-transformers>=4.43.0
-accelerate>=0.30.0
-bitsandbytes>=0.43.0
-openai>=1.30.0
-langgraph>=0.1.0
-langchain>=0.2.0
-langchain-openai>=0.1.0
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
-tiktoken>=0.7.0
-pymupdf>=1.24.0
-python-docx>=1.1.0
-ragas>=0.1.0
-scikit-learn>=1.5.0
-jinja2>=3.1.0
-schedule>=1.2.0
-python-dotenv>=1.0.0
-```
+See the actual file at the repo root — the locked set includes `torch`, `transformers`, `accelerate`, `langgraph`, `langchain`, `chromadb`, `sentence-transformers`, `tiktoken`, `pymupdf`, `python-docx`, `jinja2`, `xhtml2pdf`, `markdown`, `fastapi`, `uvicorn`, `python-multipart`, `python-dotenv`, `scikit-learn`, `numpy`, `schedule`. No OpenAI / Anthropic API keys are required for production runs — every model is local.
 
 ### Environment Variables (`.env`)
 ```bash
-OPENAI_API_KEY=sk-...          # classifier (gpt-4o-mini) + embeddings only
-HF_TOKEN=hf_...                # Qwen3-8B download (open access but token avoids rate limits)
-REGULATION_WATCH_ENABLED=true  # set false to disable automatic update checking
-UPDATE_THRESHOLD=0.95          # cosine similarity below this → article flagged as changed
+# Model selection (Qwen3-8B in production, 0.5B-Instruct for dev iteration)
+QWEN_MODEL_ID=Qwen/Qwen3-8B
+
+# Optional — Hugging Face token to avoid download rate limits
+HF_TOKEN=hf_...
+
+# CORS allow-list for the frontend (comma-separated, or "*" for any origin)
+AGENTIC_AUDIT_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+# Regulation-watcher toggles
+REGULATION_WATCH_ENABLED=true
+UPDATE_THRESHOLD=0.95            # cosine similarity below this → article flagged as changed
 ```
 
 ### First-time Setup
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env           # fill in API keys
+cp .env.example .env             # fill in QWEN_MODEL_ID + CORS origins as needed
 
-# Build regulation indexes (run once per regulation)
+# Build regulation indexes (run once per regulation; safe to re-run)
 python scripts/index_regulations.py --regulation gdpr
-python scripts/index_regulations.py --regulation soc2   # when soc2_raw.json is available
+python scripts/index_regulations.py --regulation hipaa
+python scripts/index_regulations.py --regulation nist
 
-# Run full evaluation
-python run_evaluation.py
+# CLI: evaluate a single document end-to-end
+python run_pipeline.py --doc test_datasets/gdpr/articles/gdpr_partial_known_quickdeals.pdf
 
-# Evaluate a single document
-python run_pipeline.py --doc data/testing/documents/gdpr/non_compliant/nc_001.pdf
+# Same, with the C4-nothink ablation (no Qwen <think> traces)
+python run_pipeline.py --doc <file> --no-thinking
+
+# Drift detection: pass a previous violation_report.json
+python run_pipeline.py --doc <file> --previous-report outputs/reports/<doc_id>/raw/violation_report.json
+
+# API: start the FastAPI server (consumed by the frontend)
+uvicorn backend.api.main:app --reload --port 8000
+
+# Full evaluation pipeline (regenerates outputs/POA&M/)
+python scripts/batch_evaluate.py
+python scripts/compute_full_metrics.py
+python scripts/enrich_metrics.py
+python scripts/evaluate_semantic.py
+python scripts/generate_tables.py
 ```
 
 ### API Cost Estimate
 
 | Operation | Model | Estimated Cost |
 |---|---|---|
-| Classifier (15 docs × 1 call) | gpt-4o-mini | ~$0.02 |
-| Embeddings (index + 15 docs) | text-embedding-3-small | ~$0.001 |
-| All debate + evaluation | Qwen3-8B (local) | $0.00 |
-| **Total** | | **~$0.02** |
+| Classifier + Debate + Remediation | Qwen3-8B (local) | $0.00 |
+| Embeddings (retrieval + drift + judge) | all-MiniLM-L6-v2 (local) | $0.00 |
+| Reranker | ms-marco-MiniLM-L-6-v2 (local) | $0.00 |
+| **Total per evaluation run** | | **$0.00** |
+
+The system is fully self-contained. No outbound API calls happen at inference time.
 
 ---
 
@@ -1499,3 +1562,200 @@ GDPR Art. 17 (erasure) directly contradicts HIPAA §164.530(j) (retention minimu
 | Ground truth kappa < 0.5 | Low | Annotate most unambiguous articles first (art_6, art_17); resolve by team discussion |
 | State schema change mid-build | Medium | Lock `state.py` on Day 1; any change requires updating this spec first |
 | GDPR+HIPAA conflict surfaced by classifier | Low | Exclusion matrix enforced at classifier level; logs the conflict and reason |
+
+---
+
+## 19. Frontend Integration & API Contract
+
+The backend exposes a versioned REST API at `/api/v1/*` consumed by the React/Next.js app under `frontend/`. CORS is permissive for the configured origins (`AGENTIC_AUDIT_CORS_ORIGINS`).
+
+### 19.1 Server lifecycle
+
+```bash
+# Dev (auto-reload):
+uvicorn backend.api.main:app --reload --port 8000
+
+# Prod (single process — Qwen3-8B is the bottleneck, not the HTTP layer):
+uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+The first `/analyze` request loads `Qwen3-8B` into memory (~16 GB FP16 / ~6 GB 4-bit). Subsequent requests reuse the singleton — keep the worker count at 1 unless you have multi-GPU hardware.
+
+### 19.2 Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/health` | Liveness check + active regulation namespaces |
+| `GET` | `/api/v1/regulations` | All active regulations with their focus articles |
+| `POST` | `/api/v1/analyze` | Upload a document and run the full compliance pipeline |
+| `GET` | `/api/v1/reports` | List every completed run (for a dashboard table) |
+| `GET` | `/api/v1/reports/{doc_id}` | Full ViolationReport JSON for one run |
+| `GET` | `/api/v1/reports/{doc_id}/assessment` | Download the Assessment PDF |
+| `GET` | `/api/v1/reports/{doc_id}/remediation` | Download the Remediation PDF |
+
+### 19.3 Request / response shapes
+
+**`GET /api/v1/health`**
+```json
+{ "status": "ok", "active_regulations": ["gdpr", "hipaa", "nist"] }
+```
+
+**`GET /api/v1/regulations`**
+```json
+{
+  "gdpr":  { "namespace": "gdpr",  "focus_articles": ["art_5", "art_6", "..."] },
+  "hipaa": { "namespace": "hipaa", "focus_articles": ["hipaa_164_306", "..."] },
+  "nist":  { "namespace": "nist",  "focus_articles": ["nist_ac-2", "..."] }
+}
+```
+
+**`POST /api/v1/analyze`** — `multipart/form-data` with a single `file` field. Optional query param `thinking=false` for the C4-nothink ablation. Accepted MIME types: `.pdf`, `.docx`, `.txt`.
+
+Response (synchronous; long-running — typical latency 6–8 minutes per document on Qwen3-8B):
+```json
+{
+  "doc_id": "a3f1b2c4d5e6",
+  "doc_filename": "company_privacy_policy.pdf",
+  "doc_type": "privacy_policy",
+  "regulations": ["gdpr"],
+  "risk_score": 2.4,
+  "risk_level": "Medium",
+  "articles_evaluated": 10,
+  "hallucination_rate": 0.0,
+  "thinking_enabled": true,
+  "assessment_report_url":  "/api/v1/reports/a3f1b2c4d5e6/assessment",
+  "remediation_report_url": "/api/v1/reports/a3f1b2c4d5e6/remediation"
+}
+```
+
+**`GET /api/v1/reports/{doc_id}`** — full `ViolationReport` (see Section 8). Use this to render the dashboard / per-article table.
+
+**`GET /api/v1/reports/{doc_id}/{assessment|remediation}`** — `application/pdf` download. The filename is `{doc_stem}_{kind}_{doc_id}.pdf`.
+
+**`GET /api/v1/reports`** — paginated list (currently unbounded — frontend should add client-side filters):
+```json
+{
+  "reports": [
+    {
+      "doc_id": "a3f1b2c4d5e6",
+      "doc_type": "privacy_policy",
+      "regulations": ["gdpr"],
+      "risk_score": 2.4,
+      "risk_level": "Medium",
+      "generated_at": "2026-04-19T14:32:01Z"
+    }
+  ]
+}
+```
+
+### 19.4 Error model
+
+| Status | Meaning |
+|---|---|
+| `400` | Unsupported file type, malformed multipart, missing `file` field |
+| `404` | `doc_id` not found in `outputs/reports/` |
+| `500` | Pipeline failure — check `outputs/pipeline_logs.db` for the run_id |
+
+All error bodies follow FastAPI's default shape: `{"detail": "<message>"}`.
+
+### 19.5 Suggested frontend flow
+
+```
+1. GET /api/v1/health              → confirm backend is up
+2. GET /api/v1/regulations         → render the supported-regulations panel
+3. POST /api/v1/analyze            → file upload (show "running ~7 min" banner)
+4. GET  /api/v1/reports/{doc_id}   → render risk score, per-article table, hallucination flag
+5. GET  /api/v1/reports/{doc_id}/{assessment,remediation}
+                                    → download buttons (open in new tab)
+6. GET  /api/v1/reports            → "Recent runs" sidebar
+```
+
+Long-running uploads are the only sharp edge. Recommended UX: show a determinate progress bar fed by the typical 6–8 min budget (the backend does not currently stream incremental progress — adding SSE/WebSocket is a future enhancement listed in Section 21).
+
+### 19.6 Sample fetch
+
+```ts
+async function analyze(file: File, thinking = true) {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`/api/v1/analyze?thinking=${thinking}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!r.ok) throw new Error((await r.json()).detail ?? r.statusText);
+  return r.json();
+}
+```
+
+---
+
+## 20. Teammate Handoff Runbook
+
+For the engineer picking up backend integration / building the frontend.
+
+### 20.1 What's done
+- Full LangGraph pipeline (Classifier → Retrieval → Debate → Reporter, with optional Drift) — `backend/graph.py`.
+- FastAPI layer with all endpoints listed in Section 19 — `backend/api/`.
+- Three regulation indexes (GDPR, HIPAA, NIST) loaded into `data/chroma_db/`.
+- POA&M PDF generation via Jinja2 + xhtml2pdf — `backend/reports/`.
+- Drift detection with Semantic Regression Score — `backend/drift/detector.py`.
+- Adversarial debate protocol with cite-then-verify hallucination guard — `backend/debate/protocol.py`.
+- Evaluation harness + 6-table presentation report — `scripts/evaluate_semantic.py`, `scripts/generate_tables.py`, `outputs/POA&M/EVALUATION_TABLES.pdf`.
+- Pipeline logging to SQLite (every prompt, thinking trace, response) — `outputs/pipeline_logs.db`.
+
+### 20.2 What's not yet done (good first issues)
+- **Frontend** — `frontend/` is empty. Suggested stack: Next.js + Tailwind + shadcn/ui. The API contract in Section 19 is stable.
+- **Streaming progress** — `/analyze` is synchronous. Add Server-Sent Events keyed by `run_id` so the UI can show debate-round-by-debate-round progress.
+- **Auth** — none today. Add a token-based middleware before deploying beyond localhost.
+- **SOC 2 / ISO 27001 indexing** — the `data/compliance/{soc2,iso27001}/` directories and `test_datasets/{soc2,gdpr_soc2_combined,hipaa_soc2_combined}/` are placeholders. Drop in `*_articles.json` and run `scripts/index_regulations.py --regulation <reg>`.
+- **Multi-doc batching endpoint** — `POST /api/v1/analyze/batch` accepting multiple files would help auditors evaluate a doc set in one call.
+- **Background workers** — Qwen3-8B is the bottleneck. Move `/analyze` onto a Celery / RQ worker queue once load justifies it.
+
+### 20.3 Local bring-up (10 minutes on Apple Silicon / 5 minutes on a CUDA box)
+
+```bash
+git clone <repo> && cd Agentic_Audit
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env                         # set QWEN_MODEL_ID and AGENTIC_AUDIT_CORS_ORIGINS
+
+# Smoke test the pipeline (uses cached models on second run)
+python run_pipeline.py --doc test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf
+
+# Start the backend
+uvicorn backend.api.main:app --reload --port 8000
+
+# In another shell — verify the frontend's first three calls
+curl -s http://localhost:8000/api/v1/health | jq
+curl -s http://localhost:8000/api/v1/regulations | jq
+curl -s -F "file=@test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf" \
+        http://localhost:8000/api/v1/analyze | jq
+```
+
+### 20.4 Code touch-points by task
+
+| Frontend wants… | Backend file to edit |
+|---|---|
+| New regulation surfaced | `backend/agents/classifier.py::REGULATION_REGISTRY` + `data/compliance/{reg}/` + `scripts/index_regulations.py --regulation <reg>` |
+| Different report layout | `backend/reports/templates/{assessment,remediation}.md.jinja` |
+| Adjust risk-score weights | `backend/agents/reporter.py::RISK_WEIGHTS` |
+| Different chunk size | `backend/ingestion/chunker.py` |
+| Add a new endpoint | `backend/api/routes.py` (route) + plain function in the relevant `backend/<module>/` |
+| New ablation flag | `run_pipeline.py` arg → thread through `ComplianceState["thinking_enabled"]`-style key in `backend/agents/state.py` |
+
+### 20.5 Files the frontend never needs to touch
+
+- Anything under `data/`, `outputs/`, `test_datasets/` — generated or evaluation-only.
+- `scripts/*` — research-evaluation utilities, not part of production runtime.
+- `run_evaluation.py` — superseded for results reporting by `scripts/evaluate_semantic.py` + `scripts/generate_tables.py`.
+
+---
+
+## 21. Future Enhancements (non-blocking)
+
+- Server-Sent Events for incremental debate progress on `/analyze`.
+- Authentication + per-user report scoping.
+- Background worker queue (Celery / RQ) for long-running pipelines.
+- SOC 2, ISO 27001, PCI-DSS indexing — the registry pattern in `backend/agents/classifier.py` is designed to absorb these.
+- RAFT fine-tuning of the Arbiter once 500+ high-confidence debate records have accumulated (see Section 10.3).
+- A ground-truth annotation UI replacing the current PDF-based annotator workflow.

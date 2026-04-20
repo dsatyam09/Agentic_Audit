@@ -2,8 +2,6 @@
 
 Renders the Jinja2 template at ``templates/assessment.md.jinja`` with data
 from the violation report, debate records, and pipeline state.
-
-File: backend/reports/assessment.py
 """
 
 from __future__ import annotations
@@ -16,7 +14,6 @@ _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
 
 def _build_template_env() -> Environment:
-    """Create a Jinja2 environment pointed at the templates directory."""
     return Environment(
         loader=FileSystemLoader(str(_TEMPLATE_DIR)),
         autoescape=select_autoescape([]),
@@ -27,8 +24,11 @@ def _build_template_env() -> Environment:
 
 
 def _build_executive_summary(violation_report: dict) -> str:
-    """Generate a concise executive summary paragraph from the violation report."""
-    doc_id = violation_report.get("doc_id", "Unknown")
+    """Generate a concise executive summary paragraph."""
+    doc_name = (
+        violation_report.get("doc_filename")
+        or violation_report.get("doc_id", "Unknown")
+    )
     doc_type = violation_report.get("doc_type", "document")
     risk_score = violation_report.get("risk_score", 0.0)
     risk_level = violation_report.get("risk_level", "Low")
@@ -52,12 +52,12 @@ def _build_executive_summary(violation_report: dict) -> str:
     ]
 
     lines = [
-        f"This assessment evaluated document **{doc_id}** (type: {doc_type}) "
-        f"against {n_evaluated} articles from {regulations} regulations. "
+        f"This assessment evaluated document **{doc_name}** (type: {doc_type}) "
+        f"against {n_evaluated} articles from {regulations}. "
         f"The overall risk score is **{risk_score} / 4.0** ({risk_level} risk).",
         "",
         f"Of the {n_evaluated} articles evaluated, {n_full} received Full coverage, "
-        f"{n_partial} received Partial coverage, and {n_missing} were found Missing. "
+        f"{n_partial} received Partial coverage, and {n_missing} were found Missing.",
     ]
 
     if critical_gaps:
@@ -88,50 +88,35 @@ def render_assessment_report(
     debate_records: list[dict],
     state: dict,
 ) -> str:
-    """Render the Assessment Report markdown from the Jinja2 template.
-
-    Parameters
-    ----------
-    violation_report : dict
-        The ViolationReport dict (Section 8 schema).
-    debate_records : list[dict]
-        All debate records (not deduplicated) — used for the appendix
-        with full debate transcripts.
-    state : dict
-        Full pipeline state (used to pull drift data if available).
-
-    Returns
-    -------
-    str
-        Rendered markdown string.
-    """
+    """Render the Assessment Report markdown from the Jinja2 template."""
     env = _build_template_env()
     template = env.get_template("assessment.md.jinja")
 
     summary = _build_executive_summary(violation_report)
 
-    # Regulation versions string
     reg_versions = violation_report.get("regulation_versions", {})
     regulation_scope = violation_report.get("regulations", [])
     regulation_scope_str = ", ".join(r.upper() for r in regulation_scope)
 
-    # Prepare violations sorted by risk level for the findings section
     risk_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
     sorted_violations = sorted(
         violation_report.get("violations", []),
         key=lambda v: (risk_order.get(v.get("risk_level", "Low"), 4), v.get("article_id", "")),
     )
 
-    # Drift result from state (may be None)
     drift_result = state.get("drift_result")
 
     rendered = template.render(
         doc_id=violation_report.get("doc_id", ""),
+        doc_filename=violation_report.get("doc_filename", ""),
+        doc_sha256=violation_report.get("doc_sha256", ""),
         doc_type=violation_report.get("doc_type", ""),
         regulation_scope=regulation_scope_str,
         generated_at=violation_report.get("generated_at", ""),
         risk_score=violation_report.get("risk_score", 0.0),
         risk_level=violation_report.get("risk_level", "Low"),
+        model=violation_report.get("model", "Qwen/Qwen3-8B"),
+        thinking_enabled=violation_report.get("thinking_enabled", True),
         summary=summary,
         regulation_versions=reg_versions,
         violations=sorted_violations,

@@ -1,8 +1,8 @@
 """DebateProtocol — Advocate / Challenger / Arbiter adversarial debate round.
 
 Orchestrates a single (chunk_text, clause) debate using three sequential
-Qwen3-8B calls with thinking enabled, then applies a hallucination guard
-before returning a fully populated DebateRecord.
+Qwen3-8B calls with optional thinking, then applies hallucination and
+schema guards before returning a fully populated DebateRecord.
 """
 
 from __future__ import annotations
@@ -16,110 +16,217 @@ from backend.agents.state import DebateRecord
 # ---------------------------------------------------------------------------
 # Prompt templates
 # ---------------------------------------------------------------------------
+#
+# We keep JSON schema instructions *separate* from the actual content so the
+# model cannot echo a placeholder (e.g. "Your argument for compliance here")
+# back as a genuine answer. The schema is described with <<angle brackets>>
+# to make it clear these are slot names, not values. We also provide a
+# tiny worked example so the model imitates structure rather than the slot
+# string itself.
+# ---------------------------------------------------------------------------
 
 ADVOCATE_PROMPT = """\
-You are a compliance advocate reviewing an enterprise policy against a regulatory requirement.
-Your role: find every possible reading of the policy that satisfies this requirement.
-Be thorough and generous in interpretation — find supporting language wherever it exists.
+ROLE: You are a compliance advocate reviewing an enterprise policy against a regulatory requirement.
+GOAL: Find every supporting reading of the policy that satisfies this requirement. Be thorough.
 
 {regulation} REQUIREMENT:
 {article_id} — {article_title}
 {clause_text}
 
 POLICY SECTION UNDER REVIEW:
-{policy_chunk}
+\"\"\"{policy_chunk}\"\"\"
 
-Find the strongest possible argument that this policy satisfies the requirement.
-If you find supporting language, quote it exactly.
+TASK:
+- Identify the strongest argument that this policy satisfies the requirement.
+- If supporting language exists, copy the shortest verbatim span from the POLICY SECTION (not the requirement) that supports your argument.
+- If no supporting language exists, set cited_text to null and argue accordingly.
 
-Respond in this exact JSON format:
-{{"argument": "Your argument for compliance here", "cited_text": "exact verbatim quote from policy or null if none found", "confidence": 0.0}}"""
+RESPONSE FORMAT — respond with ONE JSON object and NOTHING else:
+{{
+  "argument": <string: 2-4 sentences of your reasoning, specific to this policy>,
+  "cited_text": <string verbatim from POLICY SECTION, or null>,
+  "confidence": <float between 0.0 and 1.0>
+}}
+
+Do not repeat the field descriptions. Replace every <...> slot with your own content."""
 
 CHALLENGER_PROMPT = """\
-You are a strict compliance auditor. A compliance advocate has argued:
+ROLE: You are a strict compliance auditor. The advocate has argued for compliance.
+GOAL: Find every gap, ambiguity, and omission that shows the policy does NOT fully satisfy the requirement.
 
 ADVOCATE'S ARGUMENT:
-{advocate_full_output}
-
-Your role: challenge this argument. Find every gap, ambiguity, and omission that shows
-this policy does NOT fully satisfy the regulatory requirement. You have seen the advocate's
-best case — now find what they missed or overstated.
+{advocate_response}
 
 {regulation} REQUIREMENT:
 {article_id} — {article_title}
 {clause_text}
 
 POLICY SECTION:
-{policy_chunk}
+\"\"\"{policy_chunk}\"\"\"
 
-Respond in this exact JSON format:
-{{"counterargument": "Your challenge to the advocate's position", "gap_identified": "The specific element that is missing or insufficient", "confidence": 0.0}}"""
+TASK:
+- Identify at least one concrete gap in the policy with respect to the requirement.
+- Your counterargument must reference specific language (or its absence) in the POLICY SECTION, not the advocate's rhetoric.
+
+RESPONSE FORMAT — respond with ONE JSON object and NOTHING else:
+{{
+  "counterargument": <string: 2-4 sentences identifying weaknesses in the advocate's case>,
+  "gap_identified": <string: the single most critical missing or insufficient element>,
+  "confidence": <float between 0.0 and 1.0>
+}}
+
+Do not repeat the field descriptions. Replace every <...> slot with your own content."""
 
 ARBITER_PROMPT = """\
-You are the final compliance arbiter. You have heard both sides of a compliance debate.
+ROLE: You are the final compliance arbiter. Weigh both sides.
 
 ADVOCATE argued:
-{advocate_output}
+{advocate_response}
 
 CHALLENGER argued:
-{challenger_output}
+{challenger_response}
 
 {regulation} REQUIREMENT:
 {article_id} — {article_title}
 {clause_text}
 
 POLICY SECTION:
-{policy_chunk}
+\"\"\"{policy_chunk}\"\"\"
 
-Weigh both arguments carefully. Consider: Does the policy actually satisfy the regulatory requirement?
-The Advocate may have been too generous. The Challenger may have been too strict. Find the truth.
+COVERAGE DEFINITIONS:
+- Full: policy explicitly addresses ALL key aspects of this requirement.
+- Partial: policy addresses some aspects, or uses vague/ambiguous language.
+- Missing: policy does not address this requirement at all.
 
-Coverage definitions:
-- Full: policy explicitly and clearly addresses ALL key aspects of this requirement
-- Partial: policy addresses some but not all aspects, or uses vague/ambiguous language
-- Missing: policy does not address this requirement at all
+HARD RULES:
+1. cited_text MUST be a verbatim substring of the POLICY SECTION (not the requirement text, not your reasoning, not the advocate/challenger output).
+2. If coverage is Full or Partial, cited_text MUST be a non-empty verbatim quote from POLICY SECTION.
+3. If coverage is Missing, cited_text MUST be null.
 
-Respond ONLY in this exact JSON format:
-{{"coverage": "Full|Partial|Missing", "risk_level": "Critical|High|Medium|Low", "reasoning": "2-3 sentences referencing both the advocate and challenger arguments and the actual policy text", "cited_text": "exact verbatim quote from the policy that best satisfies the requirement, or null if nothing satisfies it", "debate_summary": "1 sentence on what the debate revealed about this policy"}}
+RESPONSE FORMAT — respond with ONE JSON object and NOTHING else:
+{{
+  "coverage": <one of: Full, Partial, Missing>,
+  "risk_level": <one of: Critical, High, Medium, Low>,
+  "reasoning": <string: 2-3 sentences referencing both sides and the actual policy text>,
+  "cited_text": <string verbatim from POLICY SECTION, or null>,
+  "debate_summary": <string: 1 sentence summarising what the debate revealed>
+}}
 
-CRITICAL: cited_text must be copied verbatim from the policy section above. If coverage is Full or Partial, cited_text must not be null."""
+Do not repeat the field descriptions. Replace every <...> slot with your own content."""
 
 
 # ---------------------------------------------------------------------------
 # JSON parsing helper
 # ---------------------------------------------------------------------------
 
+# Placeholder strings we treat as "not a real answer" so we don't let the
+# model echo our template slots back into the report.
+_TEMPLATE_PLACEHOLDERS = (
+    "your argument",
+    "your challenge",
+    "your counterargument",
+    "your reasoning",
+    "your challenge to the advocate",
+    "<string",
+    "<float",
+    "<one of",
+    "verbatim from policy section",
+    "2-4 sentences",
+    "2-3 sentences",
+)
+
+
+def _looks_like_placeholder(value: Any) -> bool:
+    """True when *value* is empty or matches a template slot description."""
+    if not isinstance(value, str):
+        return False
+    normalized = value.strip().lower()
+    if not normalized:
+        return True
+    return any(p in normalized for p in _TEMPLATE_PLACEHOLDERS)
+
+
+def _find_balanced_json(text: str) -> str | None:
+    """Locate the first balanced ``{...}`` object in *text*.
+
+    Uses a depth counter rather than regex, so it tolerates nested braces
+    and strings containing braces. Returns ``None`` if no balanced object
+    is found.
+    """
+    depth = 0
+    start = -1
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    return text[start : i + 1]
+    return None
+
+
 def safe_parse_json(text: str) -> dict:
     """Best-effort extraction of a JSON object from model output.
 
     Strategy:
     1. Try ``json.loads`` on the full text.
-    2. Attempt to locate a JSON block (possibly inside markdown fences) and parse it.
-    3. Fall back to regex key-value extraction.
-    4. Return an empty dict as last resort.
+    2. Strip markdown fences and retry.
+    3. Scan for a balanced ``{...}`` block and parse it.
+    4. Regex key-value fallback for known schema keys.
     """
+    if not isinstance(text, str) or not text.strip():
+        return {}
+
     # 1. Direct parse
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 2. Look for a JSON object (possibly inside ```json ... ```)
-    # Find the outermost { ... } pair
-    patterns = [
+    # 2. Markdown fence strip
+    fence_patterns = [
         re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL),
         re.compile(r"```\s*(\{.*?\})\s*```", re.DOTALL),
-        re.compile(r"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})", re.DOTALL),
     ]
-    for pat in patterns:
+    for pat in fence_patterns:
         match = pat.search(text)
         if match:
             try:
-                return json.loads(match.group(1))
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, dict):
+                    return parsed
             except (json.JSONDecodeError, TypeError):
                 continue
 
-    # 3. Regex key-value fallback for known keys
+    # 3. Balanced brace scan
+    block = _find_balanced_json(text)
+    if block:
+        try:
+            parsed = json.loads(block)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # 4. Regex key-value fallback for known keys
     result: dict[str, Any] = {}
     for key in (
         "argument",
@@ -132,7 +239,6 @@ def safe_parse_json(text: str) -> dict:
         "reasoning",
         "debate_summary",
     ):
-        # Match "key": "value" or "key": number
         m = re.search(
             rf'"{key}"\s*:\s*("(?:[^"\\]|\\.)*"|\d+\.?\d*|null|true|false)',
             text,
@@ -144,11 +250,28 @@ def safe_parse_json(text: str) -> dict:
             except (json.JSONDecodeError, TypeError):
                 result[key] = raw.strip('"')
 
-    if result:
-        return result
+    return result
 
-    # 4. Empty dict as absolute fallback
-    return {}
+
+def _clean_string(value: Any, fallback: str = "") -> str:
+    """Return a trimmed string, substituting *fallback* for placeholder text."""
+    if not isinstance(value, str):
+        return fallback
+    if _looks_like_placeholder(value):
+        return fallback
+    return value.strip()
+
+
+def _clean_optional_string(value: Any) -> str | None:
+    """Return a trimmed string, or None when the value looks like a placeholder/null."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    if _looks_like_placeholder(value):
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +283,7 @@ def run_debate(
     clause: dict,
     chunk_index: int,
     qwen_runner,
+    thinking: bool = True,
 ) -> DebateRecord:
     """Execute a full Advocate -> Challenger -> Arbiter debate round.
 
@@ -174,6 +298,8 @@ def run_debate(
         Index of the chunk within the document.
     qwen_runner : QwenRunner
         The loaded Qwen3-8B inference wrapper.
+    thinking : bool
+        When False, disables ``<think>`` reasoning traces (C4-nothink ablation).
 
     Returns
     -------
@@ -193,76 +319,107 @@ def run_debate(
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    advocate_raw = qwen_runner.generate(advocate_prompt, thinking=True)
+    advocate_raw = qwen_runner.generate(advocate_prompt, thinking=thinking)
     advocate_parsed = safe_parse_json(advocate_raw["response"])
 
-    advocate_argument = advocate_parsed.get("argument", advocate_raw["response"])
-    advocate_cited_text = advocate_parsed.get("cited_text")
-    advocate_confidence = float(advocate_parsed.get("confidence", 0.0))
-    advocate_thinking = advocate_raw["thinking_trace"]
+    advocate_argument = _clean_string(
+        advocate_parsed.get("argument"),
+        fallback="Advocate did not return a parseable argument.",
+    )
+    advocate_cited_text = _clean_optional_string(advocate_parsed.get("cited_text"))
+    if advocate_cited_text and advocate_cited_text not in chunk_text:
+        advocate_cited_text = None
+    try:
+        advocate_confidence = float(advocate_parsed.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        advocate_confidence = 0.0
+    advocate_thinking = advocate_raw.get("thinking_trace", "")
 
     # ── Step 2: Challenger ────────────────────────────────────────────────
+    # Pass the advocate's *parsed response* (post-</think>), not the full raw
+    # output. This prevents the Challenger from seeing the <think> trace and
+    # keeps it focused on the advocate's actual argument.
     challenger_prompt = CHALLENGER_PROMPT.format(
-        advocate_full_output=advocate_raw["full_output"],
+        advocate_response=advocate_raw["response"],
         regulation=regulation,
         article_id=article_id,
         article_title=article_title,
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    challenger_raw = qwen_runner.generate(challenger_prompt, thinking=True)
+    challenger_raw = qwen_runner.generate(challenger_prompt, thinking=thinking)
     challenger_parsed = safe_parse_json(challenger_raw["response"])
 
-    challenger_argument = challenger_parsed.get(
-        "counterargument", challenger_raw["response"]
+    challenger_argument = _clean_string(
+        challenger_parsed.get("counterargument"),
+        fallback="Challenger did not return a parseable counterargument.",
     )
-    challenger_gap = challenger_parsed.get("gap_identified", "")
-    challenger_confidence = float(challenger_parsed.get("confidence", 0.0))
-    challenger_thinking = challenger_raw["thinking_trace"]
+    challenger_gap = _clean_string(challenger_parsed.get("gap_identified"))
+    try:
+        challenger_confidence = float(challenger_parsed.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        challenger_confidence = 0.0
+    challenger_thinking = challenger_raw.get("thinking_trace", "")
 
     # ── Step 3: Arbiter ───────────────────────────────────────────────────
     arbiter_prompt = ARBITER_PROMPT.format(
-        advocate_output=advocate_raw["response"],
-        challenger_output=challenger_raw["response"],
+        advocate_response=advocate_raw["response"],
+        challenger_response=challenger_raw["response"],
         regulation=regulation,
         article_id=article_id,
         article_title=article_title,
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    arbiter_raw = qwen_runner.generate(arbiter_prompt, thinking=True)
+    arbiter_raw = qwen_runner.generate(arbiter_prompt, thinking=thinking)
     arbiter_parsed = safe_parse_json(arbiter_raw["response"])
 
-    verdict = arbiter_parsed.get("coverage", "Missing")
-    # Normalize verdict to expected values
+    verdict_raw = arbiter_parsed.get("coverage", "Missing")
+    verdict = verdict_raw if isinstance(verdict_raw, str) else "Missing"
     if verdict not in ("Full", "Partial", "Missing"):
-        verdict_lower = verdict.lower()
-        if "full" in verdict_lower:
+        vl = verdict.lower()
+        if "full" in vl:
             verdict = "Full"
-        elif "partial" in verdict_lower:
+        elif "partial" in vl:
             verdict = "Partial"
         else:
             verdict = "Missing"
 
     risk_level = arbiter_parsed.get("risk_level", clause.get("severity", "High"))
     if risk_level not in ("Critical", "High", "Medium", "Low"):
-        risk_level = "High"
+        risk_level = clause.get("severity", "High") or "High"
+        if risk_level not in ("Critical", "High", "Medium", "Low"):
+            risk_level = "High"
 
-    reasoning = arbiter_parsed.get("reasoning", "")
-    final_cited_text = arbiter_parsed.get("cited_text")
-    debate_summary = arbiter_parsed.get("debate_summary", "")
-    arbiter_thinking = arbiter_raw["thinking_trace"]
+    reasoning = _clean_string(
+        arbiter_parsed.get("reasoning"),
+        fallback="Arbiter reasoning was not parseable.",
+    )
+    final_cited_text = _clean_optional_string(arbiter_parsed.get("cited_text"))
+    debate_summary = _clean_string(arbiter_parsed.get("debate_summary"))
+    arbiter_thinking = arbiter_raw.get("thinking_trace", "")
 
     # ── Hallucination guard ───────────────────────────────────────────────
-    # If arbiter claims Full or Partial coverage with a cited_text, verify
-    # that the citation actually appears verbatim in the policy chunk.
+    # Rule 1: cited_text must be a verbatim substring of the policy chunk.
     hallucination_flag = False
-    if verdict in ("Full", "Partial") and final_cited_text:
-        if final_cited_text not in chunk_text:
-            hallucination_flag = True
-            # Downgrade Full to Partial when citation is fabricated
-            if verdict == "Full":
-                verdict = "Partial"
+    if final_cited_text and final_cited_text not in chunk_text:
+        hallucination_flag = True
+        final_cited_text = None  # strip fabricated quote so reports are honest
+        if verdict == "Full":
+            verdict = "Partial"
+
+    # Rule 2: Full/Partial verdicts MUST have a non-null cited_text.
+    # If the arbiter violated this contract, downgrade to Missing so the
+    # report reflects reality (spec §5.3 / §7.1).
+    if verdict in ("Full", "Partial") and not final_cited_text:
+        verdict = "Missing"
+
+    # Fallback debate_summary so downstream Jinja rendering is never empty.
+    if not debate_summary:
+        debate_summary = (
+            f"Debate concluded with verdict: {verdict} "
+            f"({'evidence cited' if final_cited_text else 'no verbatim evidence'})."
+        )
 
     # ── Assemble DebateRecord ─────────────────────────────────────────────
     record: DebateRecord = {
