@@ -1,0 +1,205 @@
+{
+  "hallucination": {
+    "total_evaluations": 9,
+    "hallucination_flags": 3,
+    "hallucination_rate": 0.3333,
+    "source": "violation_report"
+  },
+  "classification": {
+    "support": 8,
+    "macro_f1": 0.286,
+    "cohens_kappa": null,
+    "accuracy": 0.75,
+    "per_class": {
+      "Full": {
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.857,
+        "support": 8
+      },
+      "Partial": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      },
+      "Missing": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 0
+      }
+    },
+    "confusion_matrix": [
+      [
+        6,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0
+      ]
+    ],
+    "labels": [
+      "Full",
+      "Partial",
+      "Missing"
+    ],
+    "coverage": {
+      "ground_truth_total": 9,
+      "predictions_total": 9,
+      "overlap_total": 8,
+      "missing_in_predictions": 1,
+      "extra_predictions": 1
+    },
+    "missing_in_predictions": [
+      "art_44"
+    ],
+    "extra_predictions": [
+      "art_25"
+    ],
+    "kappa_note": "Undefined for single-class distributions",
+    "kappa_interpretation": null,
+    "scoring_scope": {
+      "mode": "focus_articles_only",
+      "regulation_scope": [
+        "gdpr"
+      ],
+      "focus_articles": [
+        "art_13",
+        "art_14",
+        "art_17",
+        "art_25",
+        "art_32",
+        "art_33",
+        "art_44",
+        "art_5",
+        "art_6",
+        "art_7"
+      ]
+    }
+  },
+  "predictions": {
+    "art_25": "Partial",
+    "art_14": "Full",
+    "art_33": "Full",
+    "art_17": "Full",
+    "art_13": "Full",
+    "art_5": "Full",
+    "art_6": "Full",
+    "art_32": "Partial",
+    "art_7": "Partial"
+  },
+  "n_predictions": 9,
+  "ground_truth_provided": true,
+  "ground_truth_source": {
+    "source": "auto",
+    "matched_stem": "gdpr_compliant_streamvibe",
+    "annotators": [
+      "claude",
+      "gemini",
+      "gpt"
+    ],
+    "per_annotator": {
+      "gemini": {
+        "art_39": "Full",
+        "art_38": "Full",
+        "art_13": "Full",
+        "art_37": "Full",
+        "art_6": "Full",
+        "art_14": "Full",
+        "art_19": "Full",
+        "art_17": "Full",
+        "art_16": "Full",
+        "art_21": "Full",
+        "art_12": "Full",
+        "art_18": "Full",
+        "art_15": "Full",
+        "art_7": "Full",
+        "art_20": "Full",
+        "art_5": "Full",
+        "art_45": "Full",
+        "art_46": "Full",
+        "art_44": "Full",
+        "art_28": "Full",
+        "art_8": "Full",
+        "art_33": "Full",
+        "art_32": "Full",
+        "art_34": "Full",
+        "art_22": "Full"
+      },
+      "claude": {
+        "art_13": "Full",
+        "art_37": "Full",
+        "art_6": "Full",
+        "art_12": "Full",
+        "art_15": "Full",
+        "art_5": "Full",
+        "art_44": "Full",
+        "art_28": "Full",
+        "art_8": "Full"
+      },
+      "gpt": {
+        "art_13": "Full",
+        "art_37": "Full",
+        "art_6": "Full",
+        "art_12": "Full",
+        "art_15": "Full",
+        "art_5": "Full",
+        "art_44": "Full",
+        "art_28": "Full",
+        "art_8": "Full"
+      }
+    },
+    "files": [
+      "test_datasets/gdpr/annotations/gdpr_compliant_streamvibe_annotation_gemini.pdf",
+      "test_datasets/gdpr/annotations/gdpr_compliant_streamvibe_annotation_claude.pdf",
+      "test_datasets/gdpr/annotations/gdpr_compliant_streamvibe_annotation_gpt.pdf"
+    ]
+  },
+  "ground_truth": {
+    "art_28": "Full",
+    "art_12": "Full",
+    "art_7": "Full",
+    "art_34": "Full",
+    "art_14": "Full",
+    "art_5": "Full",
+    "art_33": "Full",
+    "art_16": "Full",
+    "art_21": "Full",
+    "art_18": "Full",
+    "art_44": "Full",
+    "art_19": "Full",
+    "art_8": "Full",
+    "art_45": "Full",
+    "art_32": "Full",
+    "art_15": "Full",
+    "art_46": "Full",
+    "art_17": "Full",
+    "art_6": "Full",
+    "art_39": "Full",
+    "art_38": "Full",
+    "art_22": "Full",
+    "art_13": "Full",
+    "art_37": "Full",
+    "art_20": "Full"
+  },
+  "ground_truth_scored": {
+    "art_7": "Full",
+    "art_14": "Full",
+    "art_5": "Full",
+    "art_33": "Full",
+    "art_44": "Full",
+    "art_32": "Full",
+    "art_17": "Full",
+    "art_6": "Full",
+    "art_13": "Full"
+  }
+}
