@@ -1,0 +1,111 @@
+# Compliance Assessment Report
+
+**Document:** {{ doc_id }} — {{ doc_type }}
+**Regulation(s):** {{ regulation_scope }}
+**Assessment Date:** {{ generated_at }}
+**Overall Risk Score:** {{ risk_score }} / 4.0 ({{ risk_level }})
+**Assessed By:** AI Compliance Monitoring Agent v1.0
+
+---
+
+## Executive Summary
+
+{{ summary }}
+
+---
+
+## Assessment Methodology
+
+- **Evaluation Protocol:** Adversarial Debate Protocol (Advocate → Challenger → Arbiter)
+- **Model:** Qwen/Qwen3-8B with explicit reasoning traces
+{% for reg, version in regulation_versions.items() %}
+- **{{ reg | upper }} Version:** {{ version }}
+{% endfor %}
+- **Retrieval:** RAG with BGE cross-encoder reranking
+
+---
+
+## Article-by-Article Findings
+
+{% for v in violations %}
+### {{ v.article_id }} — {{ v.article_title }} [{{ v.risk_level }}] — Coverage: {{ v.verdict }}
+
+**Regulatory Requirement:**
+{{ v.article_id | upper }} — {{ v.article_title }}
+
+**Evidence Found:**
+{% if v.final_cited_text %}
+> "{{ v.final_cited_text }}"
+{% else %}
+> No supporting language found.
+{% endif %}
+
+**Debate Summary:**
+{{ v.debate_summary }}
+
+**Finding:**
+{{ v.reasoning }}
+
+**Hallucination Flag:** {{ v.hallucination_flag }}
+
+---
+
+{% endfor %}
+
+## Risk Summary Table
+
+| Article | Title | Coverage | Risk Level | SRS |
+|---------|-------|----------|------------|-----|
+{% for v in violations %}
+| {{ v.article_id }} | {{ v.article_title }} | {{ v.verdict }} | {{ v.risk_level }} | {% if drift_result %}{% for reg in drift_result.get('regressions', []) %}{% if reg.article_id == v.article_id %}{{ reg.semantic_regression_score }}{% endif %}{% endfor %}{% else %}—{% endif %} |
+{% endfor %}
+
+---
+
+## Hallucination Analysis
+
+- **Total evaluations:** {{ articles_evaluated }}
+- **Flagged evaluations:** {{ hallucination_flags }}
+- **Hallucination rate:** {{ (hallucination_rate * 100) | round(1) }}%
+
+---
+
+## Appendix: Full Debate Transcripts
+
+{% for rec in debate_records %}
+### Debate: {{ rec.article_id }} — Chunk {{ rec.chunk_index }}
+
+**Advocate Thinking Trace:**
+{% if rec.advocate_thinking %}
+{{ rec.advocate_thinking }}
+{% else %}
+_No thinking trace recorded._
+{% endif %}
+
+**Advocate Argument:**
+{{ rec.advocate_argument }}
+
+**Challenger Thinking Trace:**
+{% if rec.challenger_thinking %}
+{{ rec.challenger_thinking }}
+{% else %}
+_No thinking trace recorded._
+{% endif %}
+
+**Challenger Argument:**
+{{ rec.challenger_argument }}
+
+**Arbiter Thinking Trace:**
+{% if rec.arbiter_thinking %}
+{{ rec.arbiter_thinking }}
+{% else %}
+_No thinking trace recorded._
+{% endif %}
+
+**Arbiter Verdict:**
+{{ rec.reasoning }}
+**Coverage:** {{ rec.verdict }} | **Risk Level:** {{ rec.risk_level }}
+
+---
+
+{% endfor %}
