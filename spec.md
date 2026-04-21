@@ -1,4 +1,4 @@
-# AI Compliance Monitoring Agent — Engineering Specification
+# AI Compliance Monitoring Agent - Engineering Specification
 
 > This document is the single source of truth for building this system.
 > Every implementation decision is made here. Claude Code reads this and builds exactly what is described.
@@ -10,24 +10,24 @@
 
 ### What This System Does
 
-An AI-powered compliance monitoring agent that evaluates enterprise documents (privacy policies, SOPs, vendor agreements, breach response procedures) against regulatory standards. It produces structured audit-ready reports in a POA&M (Plan of Action and Milestones) format — the same format used by real enterprise compliance teams.
+An AI-powered compliance monitoring agent that evaluates enterprise documents (privacy policies, SOPs, vendor agreements, breach response procedures) against regulatory standards. It produces structured audit-ready reports in a POA&M (Plan of Action and Milestones) format - the same format used by real enterprise compliance teams.
 
 The system continuously monitors for **compliance drift** as both regulations and internal documents evolve over time.
 
 ### Three Technical Novelties
 
-**Novelty 1 — Adversarial Debate Evaluation**
+**Novelty 1 - Adversarial Debate Evaluation**
 Rather than a single LLM deciding compliance, three specialized agents debate each clause:
-- `AdvocateAgent` — finds every reading of the policy that satisfies the requirement
-- `ChallengerAgent` — sees the Advocate's argument, then finds every gap and omission
-- `ArbiterAgent` — reads both arguments and delivers the final structured verdict
+- `AdvocateAgent` - finds every reading of the policy that satisfies the requirement
+- `ChallengerAgent` - sees the Advocate's argument, then finds every gap and omission
+- `ArbiterAgent` - reads both arguments and delivers the final structured verdict
 
-This is grounded in LLM debate research (Du et al., 2023 — *Improving Factuality via Multi-Agent Debate*) and maps directly to how legal compliance works in practice. No existing compliance RAG system does this.
+This is grounded in LLM debate research (Du et al., 2023 - *Improving Factuality via Multi-Agent Debate*) and maps directly to how legal compliance works in practice. No existing compliance RAG system does this.
 
-**Novelty 2 — Local Open-Weight LLM with Visible Thinking Traces (Qwen3-8B)**
-All debate agents run on `Qwen/Qwen3-8B` locally. Qwen3-8B produces `<think>...</think>` reasoning tokens before every answer. Every thinking trace is captured in the pipeline log store — making the system fully auditable and reproducible. This enables a unique ablation: thinking mode ON vs OFF.
+**Novelty 2 - Local Open-Weight LLM with Visible Thinking Traces (Qwen3-8B)**
+All debate agents run on `Qwen/Qwen3-8B` locally. Qwen3-8B produces `<think>...</think>` reasoning tokens before every answer. Every thinking trace is captured in the pipeline log store - making the system fully auditable and reproducible. This enables a unique ablation: thinking mode ON vs OFF.
 
-**Novelty 3 — Regulation-Aware Continuous Update via Adaptive RAG Refresh**
+**Novelty 3 - Regulation-Aware Continuous Update via Adaptive RAG Refresh**
 Compliance regulations update frequently (e.g., GDPR amendments, new NIST guidelines). Rather than requiring manual re-indexing, the system implements an **Adaptive Regulation Refresh** mechanism:
 - A scheduled `RegulationWatcher` polls official regulation sources (EUR-Lex for GDPR, HHS for HIPAA, etc.) for structural changes
 - When a change is detected, it computes a semantic diff between old and new article embeddings
@@ -36,7 +36,7 @@ Compliance regulations update frequently (e.g., GDPR amendments, new NIST guidel
 - Active documents that were previously evaluated against the changed articles are flagged for re-evaluation
 - This is novel: existing compliance systems treat regulation data as static; this one treats it as a live feed
 
-**Novelty 4 — Compliance Drift with Semantic Regression Score (SRS)**
+**Novelty 4 - Compliance Drift with Semantic Regression Score (SRS)**
 Compares two versions of the same enterprise document. Beyond flagging regressions, computes a continuous **Semantic Regression Score**:
 ```
 SRS = (coverage_rank_drop × risk_weight) × (1 + cosine_distance(cited_text_v1, cited_text_v2))
@@ -73,12 +73,12 @@ Multi-regulation is permitted when content genuinely spans domains
 
 ### Cross-Regulation Exclusion
 
-**`GDPR + HIPAA` are mutually exclusive** — GDPR mandates erasure on request while
+**`GDPR + HIPAA` are mutually exclusive** - GDPR mandates erasure on request while
 HIPAA mandates minimum retention periods. Contradictory obligations cannot be
 jointly evaluated on the same document. If both are assigned, the classifier
 keeps only the one that best matches `doc_type`.
 
-**NIST can coexist with either GDPR or HIPAA** — it is a security framework, not
+**NIST can coexist with either GDPR or HIPAA** - it is a security framework, not
 a privacy/health law, so there is no conflict.
 
 ---
@@ -90,7 +90,7 @@ a privacy/health law, so there is no conflict.
 ```
 Agentic_Audit/
 │
-├── spec.md                          ← this file — the single source of truth
+├── spec.md                          ← this file - the single source of truth
 ├── README.md                        ← brief setup instructions
 ├── architecture.md                  ← step-by-step system walkthrough
 ├── requirements.txt
@@ -106,7 +106,7 @@ Agentic_Audit/
 │   │   └── routes.py                ← /api/v1/{health,regulations,analyze,reports,...}
 │   │
 │   ├── agents/
-│   │   ├── state.py                 ← ComplianceState TypedDict — DO NOT change without updating this spec
+│   │   ├── state.py                 ← ComplianceState TypedDict - DO NOT change without updating this spec
 │   │   ├── classifier.py            ← doc_type + regulation routing + REGULATION_REGISTRY
 │   │   ├── retrieval_agent.py       ← RAG node (chunk → top-k articles)
 │   │   ├── debate_agent.py          ← orchestrates DebateProtocol over (chunk, article) pairs
@@ -135,7 +135,7 @@ Agentic_Audit/
 │   ├── reports/
 │   │   ├── assessment.py            ← renders assessment_report.md via Jinja2
 │   │   ├── remediation.py           ← renders remediation_report.md via Jinja2
-│   │   ├── pdf_renderer.py          ← markdown_to_pdf() — Markdown → HTML → PDF (xhtml2pdf)
+│   │   ├── pdf_renderer.py          ← markdown_to_pdf() - Markdown → HTML → PDF (xhtml2pdf)
 │   │   └── templates/
 │   │       ├── assessment.md.jinja
 │   │       └── remediation.md.jinja
@@ -245,7 +245,7 @@ All regulation data follows this schema regardless of source regulation. This is
 ]
 ```
 
-**Enriched articles file schema** (`data/compliance/{reg}/{reg}_articles.json`) — generated by `scripts/prepare_dataset.py`:
+**Enriched articles file schema** (`data/compliance/{reg}/{reg}_articles.json`) - generated by `scripts/prepare_dataset.py`:
 ```json
 [
   {
@@ -270,17 +270,17 @@ All regulation data follows this schema regardless of source regulation. This is
 ]
 ```
 
-### 4.2 GDPR Dataset (Current Status — Done)
+### 4.2 GDPR Dataset (Current Status - Done)
 
-- **Source:** `data/compliance/gdpr/gdpr_raw.json` — 272 records (99 articles + 173 recitals)
-- **Enriched:** `data/compliance/gdpr/gdpr_articles.json` — 10 focus articles with severity + key_requirements
-- **Chroma:** 10 vectors in namespace `"gdpr"` — one per article, recital context appended
+- **Source:** `data/compliance/gdpr/gdpr_raw.json` - 272 records (99 articles + 173 recitals)
+- **Enriched:** `data/compliance/gdpr/gdpr_articles.json` - 10 focus articles with severity + key_requirements
+- **Chroma:** 10 vectors in namespace `"gdpr"` - one per article, recital context appended
 - **Severity map:**
 
 ```python
 GDPR_SEVERITY = {
     "art_5":  "Critical",   # Core principles
-    "art_6":  "Critical",   # Lawful basis — most commonly missing
+    "art_6":  "Critical",   # Lawful basis - most commonly missing
     "art_7":  "High",       # Consent conditions
     "art_13": "High",       # Direct collection notice
     "art_14": "High",       # Indirect collection notice
@@ -294,7 +294,7 @@ GDPR_SEVERITY = {
 
 ### 4.3 Ground Truth Annotation Format
 
-Ground truth lives as **annotation PDFs** (one per LLM annotator: Claude, GPT-4, Gemini) under `test_datasets/{reg}/annotations/`. These PDFs use a structured format — each finding tagged `[VIOLATION]`, `[CONCERN]`, or `[COMPLIANT]` with article references — and are parsed at evaluation time by `scripts/parse_annotations.py`.
+Ground truth lives as **annotation PDFs** (one per LLM annotator: Claude, GPT-4, Gemini) under `test_datasets/{reg}/annotations/`. These PDFs use a structured format - each finding tagged `[VIOLATION]`, `[CONCERN]`, or `[COMPLIANT]` with article references - and are parsed at evaluation time by `scripts/parse_annotations.py`.
 
 **Layout:**
 ```
@@ -343,8 +343,8 @@ test_datasets/
 - The three annotators are reconciled by majority vote across models (ties broken by worst verdict).
 
 **Important constraints:**
-- All testing documents are synthetic — generated to have known compliance characteristics.
-- No HIPAA+GDPR combined documents exist (excluded by design — see Section 2).
+- All testing documents are synthetic - generated to have known compliance characteristics.
+- No HIPAA+GDPR combined documents exist (excluded by design - see Section 2).
 - SOC 2 / ISO 27001 / multi-regulation document sets exist as empty placeholders awaiting future annotation.
 
 ### 4.4 Adding a New Regulation
@@ -420,7 +420,7 @@ class ComplianceState(TypedDict):
 
     # ── Classifier output ──────────────────────────────────────────────────
     doc_type:                str             # "privacy_policy"|"security_sop"|"vendor_agreement"|"data_handling"|"breach_sop"|"other"
-    regulation_scope:        list[str]       # ["gdpr"] or ["gdpr","nist"] — enforces exclusion matrix
+    regulation_scope:        list[str]       # ["gdpr"] or ["gdpr","nist"] - enforces exclusion matrix
     classifier_confidence:   float
     classifier_reasoning:    str
 
@@ -433,12 +433,12 @@ class ComplianceState(TypedDict):
     # ── Reporter output ─────────────────────────────────────────────────────
     risk_score:              float           # 0.0 (compliant) → 4.0 (non-compliant)
     risk_level:              str             # "Low"|"Medium"|"High"|"Critical"
-    violation_report:        dict            # full ViolationReport — see Section 8
+    violation_report:        dict            # full ViolationReport - see Section 8
     poam:                    POAMReport      # paths to Assessment + Remediation reports
 
     # ── Drift (optional) ────────────────────────────────────────────────────
     previous_report_path:    str | None      # path to prior violation_report.json
-    drift_result:            dict | None     # DriftResult — see Section 8
+    drift_result:            dict | None     # DriftResult - see Section 8
 
     # ── Pipeline log (auto-merged by LangGraph) ─────────────────────────────
     pipeline_log: Annotated[list[dict], operator.add]
@@ -450,7 +450,7 @@ class ComplianceState(TypedDict):
 
 ### 6.1 ClassifierAgent (`backend/agents/classifier.py`)
 
-**Model:** Qwen (local) — same `QwenRunner` singleton used by debate agents. `thinking=False`, `max_new_tokens=256`.
+**Model:** Qwen (local) - same `QwenRunner` singleton used by debate agents. `thinking=False`, `max_new_tokens=256`.
 
 **Inputs:** `state["doc_text"][:1500]`, `state["doc_path"]`
 
@@ -533,14 +533,14 @@ def retrieve_and_rerank(query: str, namespace: str, top_k_candidates: int, top_k
 
 ### 6.3 QwenRunner (`backend/debate/qwen_runner.py`)
 
-**Singleton** — loaded once at process start, shared across all debate agents.
+**Singleton** - loaded once at process start, shared across all debate agents.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch, re
 
 class QwenRunner:
-    # Override via QWEN_MODEL_ID env var — e.g., Qwen/Qwen2.5-0.5B-Instruct for dev/testing
+    # Override via QWEN_MODEL_ID env var - e.g., Qwen/Qwen2.5-0.5B-Instruct for dev/testing
     MODEL_ID = os.environ.get("QWEN_MODEL_ID", "Qwen/Qwen3-8B")
 
     def __init__(self):
@@ -555,9 +555,9 @@ class QwenRunner:
     def generate(self, prompt: str, thinking: bool = True, max_new_tokens: int = 1024) -> dict:
         """
         Returns:
-            thinking_trace: str   — content of <think>...</think> (empty string if thinking=False)
-            response: str         — text after </think> tag (or full output if no think tag)
-            full_output: str      — complete raw model output
+            thinking_trace: str   - content of <think>...</think> (empty string if thinking=False)
+            response: str         - text after </think> tag (or full output if no think tag)
+            full_output: str      - complete raw model output
         """
         system_msg = (
             "You are an expert compliance auditor. Think step by step through the legal "
@@ -576,7 +576,7 @@ class QwenRunner:
             output_ids = self.model.generate(
                 **inputs,
                 max_new_tokens=max_new_tokens,
-                do_sample=False     # deterministic — required for reproducibility
+                do_sample=False     # deterministic - required for reproducibility
             )
 
         full_output = self.tokenizer.decode(
@@ -590,7 +590,7 @@ class QwenRunner:
 
         return {"thinking_trace": thinking_trace, "response": response, "full_output": full_output}
 
-# Module-level singleton — import this, don't instantiate a new one
+# Module-level singleton - import this, don't instantiate a new one
 qwen = QwenRunner()
 ```
 
@@ -717,7 +717,7 @@ The Assessment Report is the comprehensive audit finding. It contains:
 
 ```
 # Compliance Assessment Report
-**Document:** {doc_id} — {doc_type}
+**Document:** {doc_id} - {doc_type}
 **Regulation(s):** {regulation_scope joined}
 **Assessment Date:** {generated_at}
 **Overall Risk Score:** {risk_score} / 4.0 ({risk_level})
@@ -733,14 +733,14 @@ The Assessment Report is the comprehensive audit finding. It contains:
 ## Assessment Methodology
 - Adversarial Debate Protocol (Advocate → Challenger → Arbiter)
 - Model: Qwen/Qwen3-8B with explicit reasoning traces
-- Regulatory Source: [regulation source URL] — Version: {regulation_version}
+- Regulatory Source: [regulation source URL] - Version: {regulation_version}
 - Retrieval: RAG with BGE cross-encoder reranking
 
 ---
 
 ## Article-by-Article Findings
 
-### {article_id} — {article_title} [{severity}] — Coverage: {verdict}
+### {article_id} - {article_title} [{severity}] - Coverage: {verdict}
 
 **Regulatory Requirement:**
 {clause_text}
@@ -769,7 +769,7 @@ The Assessment Report is the comprehensive audit finding. It contains:
 
 | Article | Title | Coverage | Risk Level | SRS (if drift) |
 |---|---|---|---|---|
-| art_5 | Principles | Partial | Critical | — |
+| art_5 | Principles | Partial | Critical | - |
 ...
 
 ---
@@ -783,7 +783,7 @@ Hallucination rate: {rate}%
 
 ## Appendix: Full Debate Transcripts
 
-### Debate: {article_id} — Chunk {chunk_index}
+### Debate: {article_id} - Chunk {chunk_index}
 
 **Advocate Thinking Trace:**
 {advocate_thinking}
@@ -827,9 +827,9 @@ Estimated remediation effort: {derived from severity counts}
 
 ## Remediation Actions
 
-### ACTION-001 [CRITICAL] — {article_id}: {article_title}
+### ACTION-001 [CRITICAL] - {article_id}: {article_title}
 
-**Current State:** {verdict} — {reasoning}
+**Current State:** {verdict} - {reasoning}
 
 **Gap Identified:**
 {challenger_gap}
@@ -837,7 +837,7 @@ Estimated remediation effort: {derived from severity counts}
 **Required Action:**
 Add the following language to the {section} section of the document:
 
-> {specific remediation language — 2-3 sentences of exact text to add}
+> {specific remediation language - 2-3 sentences of exact text to add}
 
 **Acceptance Criteria:**
 The remediated document must satisfy:
@@ -910,10 +910,10 @@ All inter-component data structures. Do not deviate.
     }
   ],
   "hallucination_flags": 0,
-  "hallucination_rate": 0.0,              // fraction in [0.0, 1.0] — NOT a percentage
+  "hallucination_rate": 0.0,              // fraction in [0.0, 1.0] - NOT a percentage
   "generated_at": "2025-04-11T14:32:01Z",
   "model": "Qwen/Qwen3-8B",
-  "regulation_versions": {"gdpr": "2016/679 — last checked 2025-04-01"}
+  "regulation_versions": {"gdpr": "2016/679 - last checked 2025-04-01"}
 }
 ```
 
@@ -970,10 +970,10 @@ All inter-component data structures. Do not deviate.
 ```
 You are a compliance advocate reviewing an enterprise policy against a regulatory requirement.
 Your role: find every possible reading of the policy that satisfies this requirement.
-Be thorough and generous in interpretation — find supporting language wherever it exists.
+Be thorough and generous in interpretation - find supporting language wherever it exists.
 
 {REGULATION} REQUIREMENT:
-{article_id} — {article_title}
+{article_id} - {article_title}
 {clause_text}
 
 POLICY SECTION UNDER REVIEW:
@@ -995,10 +995,10 @@ ADVOCATE'S ARGUMENT:
 
 Your role: challenge this argument. Find every gap, ambiguity, and omission that shows
 this policy does NOT fully satisfy the regulatory requirement. You have seen the advocate's
-best case — now find what they missed or overstated.
+best case - now find what they missed or overstated.
 
 {REGULATION} REQUIREMENT:
-{article_id} — {article_title}
+{article_id} - {article_title}
 {clause_text}
 
 POLICY SECTION:
@@ -1019,7 +1019,7 @@ CHALLENGER argued:
 {challenger_output}
 
 {REGULATION} REQUIREMENT:
-{article_id} — {article_title}
+{article_id} - {article_title}
 {clause_text}
 
 POLICY SECTION:
@@ -1043,7 +1043,7 @@ CRITICAL: cited_text must be copied verbatim from the policy section above. If c
 ```
 Classify this enterprise document and identify which compliance regulations apply.
 
-Supported regulations: gdpr (EU personal data), hipaa (US health data / PHI), nist (security controls — NIST SP 800-53).
+Supported regulations: gdpr (EU personal data), hipaa (US health data / PHI), nist (security controls - NIST SP 800-53).
 Rules:
 - gdpr: EU personal data collection, processing, consent, data-subject rights, privacy policies.
 - hipaa: US protected health information (PHI), covered entities, BAAs, breach notification.
@@ -1053,13 +1053,13 @@ Rules:
 
 Examples:
 Document: "This Privacy Policy describes how Acme Corp collects and uses personal data of EU residents..."
-→ {"doc_type": "privacy_policy", "regulation_scope": ["gdpr"], "confidence": 0.95, "reasoning": "EU personal data processing — GDPR applies."}
+→ {"doc_type": "privacy_policy", "regulation_scope": ["gdpr"], "confidence": 0.95, "reasoning": "EU personal data processing - GDPR applies."}
 
 Document: "This Security SOP defines incident response and access control procedures for our systems..."
 → {"doc_type": "security_sop", "regulation_scope": ["nist"], "confidence": 0.88, "reasoning": "Security procedures align with NIST SP 800-53 controls (IR-4, AC-2, AU-2)."}
 
 Document: "This Business Associate Agreement covers PHI handling between covered entities..."
-→ {"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI — HIPAA applies. GDPR excluded due to conflict."}
+→ {"doc_type": "vendor_agreement", "regulation_scope": ["hipaa"], "confidence": 0.92, "reasoning": "BAA covering PHI - HIPAA applies. GDPR excluded due to conflict."}
 
 Document: "This Data Handling SOP governs EU employee data stored on our secure infrastructure..."
 → {"doc_type": "data_handling", "regulation_scope": ["gdpr", "nist"], "confidence": 0.84, "reasoning": "EU personal data (GDPR) stored on auditable secure systems (NIST)."}
@@ -1106,12 +1106,12 @@ REGULATION_SOURCES = {
     "hipaa": {
         "url": "https://www.ecfr.gov/current/title-45/subtitle-A/subchapter-C",
         "parser": "hipaa_parser",
-        "check_interval_hours": 168   # weekly — CFR updates are infrequent
+        "check_interval_hours": 168   # weekly - CFR updates are infrequent
     },
     "nist": {
         "url": "https://csrc.nist.gov/projects/cprt/catalog",
         "parser": "nist_parser",
-        "check_interval_hours": 720   # monthly — SP 800-53 revisions are rare
+        "check_interval_hours": 720   # monthly - SP 800-53 revisions are rare
     }
 }
 
@@ -1163,7 +1163,7 @@ When article `art_17` changes, query `document_regulation_versions` for all `doc
 
 ### 10.3 Model Improvement Strategy
 
-**Approach: Retrieval-Augmented Fine-Tuning (RAFT) — not standard fine-tuning**
+**Approach: Retrieval-Augmented Fine-Tuning (RAFT) - not standard fine-tuning**
 
 Standard fine-tuning on compliance text would require thousands of examples and risks catastrophic forgetting of the model's legal reasoning capability. Instead, use **RAFT** (Zhang et al., 2024):
 
@@ -1173,13 +1173,13 @@ Standard fine-tuning on compliance text would require thousands of examples and 
 
 3. **When to fine-tune:** Once 500+ high-confidence debate records are accumulated (hallucination_flag=False, inter-model kappa ≥ 0.8 on that example). This is dataset-size gated.
 
-4. **Fine-tuning target:** Fine-tune only the Arbiter role initially — it makes the final judgment and benefits most from domain adaptation. Advocate and Challenger can remain base Qwen3-8B.
+4. **Fine-tuning target:** Fine-tune only the Arbiter role initially - it makes the final judgment and benefits most from domain adaptation. Advocate and Challenger can remain base Qwen3-8B.
 
 5. **Infrastructure:** Use Unsloth + QLoRA for efficient fine-tuning on the 8B model. Training runs on a single A100.
 
 ```python
 # Future: scripts/finetune_arbiter.py
-# Dataset: outputs/logs/ — filter records where hallucination_flag=False and kappa >= 0.8
+# Dataset: outputs/logs/ - filter records where hallucination_flag=False and kappa >= 0.8
 # Format: RAFT-style instruction tuning
 # Library: unsloth + trl (SFTTrainer)
 # Checkpoint: saved to models/arbiter_raft_v{n}/
@@ -1260,7 +1260,7 @@ def run_pipeline(doc_path: str, previous_report_path: str | None = None) -> Comp
 ## 12. Pipeline Log Store (`backend/logging/pipeline_log.py`)
 
 ```sql
--- SQLite schema — outputs/pipeline_logs.db
+-- SQLite schema - outputs/pipeline_logs.db
 CREATE TABLE pipeline_logs (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id            TEXT NOT NULL,
@@ -1379,7 +1379,7 @@ test_datasets/{reg}/articles/*.pdf
    scripts/enrich_metrics.py        ← (optional) recomputes retrieval-recall metrics
             │                          from outputs/pipeline_logs.db
             ▼
-   scripts/evaluate_semantic.py     ← PRIMARY judge — sentence-transformer cosine + rule-based
+   scripts/evaluate_semantic.py     ← PRIMARY judge - sentence-transformer cosine + rule-based
             │                          classifier; produces per-doc semantic_metrics.json and
             │                          outputs/POA&M/_semantic_evaluation.json
             ▼
@@ -1437,7 +1437,7 @@ def compute_metrics(predictions, ground_truth):
     ground_truth: same shape, parsed from annotation PDFs.
     Returns three views:
       • Full-as-positive          (compliance certification view)
-      • Non-compliant-as-positive (audit-finding view — operationally important)
+      • Non-compliant-as-positive (audit-finding view - operationally important)
       • Macro-averaged 3-class    (label-balanced)
     Plus exact-match accuracy and Cohen's Kappa.
     """
@@ -1445,26 +1445,26 @@ def compute_metrics(predictions, ground_truth):
 
 Additional metrics surfaced in `EVALUATION_TABLES.md`:
 
-- **RAGAS Faithfulness** — target ≥ 0.85 (rubric value)
-- **RAGAS Answer Relevance** — target ≥ 0.80
-- **RAGAS Context Precision** — target ≥ 0.75
-- **Hallucination rate** — `hallucination_flags / total_debate_evaluations` (also reported as a fraction in `[0.0, 1.0]` in `violation_report.json`)
-- **Likert report-quality score** — 1-4: 4 = all artifacts present + 0 hallucinations; 3 = all + ≤10% hall; 2 = missing artifact or ≤25%; 1 = severe.
-- **Debate consistency** (legacy) — % where Arbiter aligns with the side that matches ground truth.
+- **RAGAS Faithfulness** - target ≥ 0.85 (rubric value)
+- **RAGAS Answer Relevance** - target ≥ 0.80
+- **RAGAS Context Precision** - target ≥ 0.75
+- **Hallucination rate** - `hallucination_flags / total_debate_evaluations` (also reported as a fraction in `[0.0, 1.0]` in `violation_report.json`)
+- **Likert report-quality score** - 1-4: 4 = all artifacts present + 0 hallucinations; 3 = all + ≤10% hall; 2 = missing artifact or ≤25%; 1 = severe.
+- **Debate consistency** (legacy) - % where Arbiter aligns with the side that matches ground truth.
 
 ---
 
 ## 15. Environment Setup
 
 ### Requirements (`requirements.txt`)
-See the actual file at the repo root — the locked set includes `torch`, `transformers`, `accelerate`, `langgraph`, `langchain`, `chromadb`, `sentence-transformers`, `tiktoken`, `pymupdf`, `python-docx`, `jinja2`, `xhtml2pdf`, `markdown`, `fastapi`, `uvicorn`, `python-multipart`, `python-dotenv`, `scikit-learn`, `numpy`, `schedule`. No OpenAI / Anthropic API keys are required for production runs — every model is local.
+See the actual file at the repo root - the locked set includes `torch`, `transformers`, `accelerate`, `langgraph`, `langchain`, `chromadb`, `sentence-transformers`, `tiktoken`, `pymupdf`, `python-docx`, `jinja2`, `xhtml2pdf`, `markdown`, `fastapi`, `uvicorn`, `python-multipart`, `python-dotenv`, `scikit-learn`, `numpy`, `schedule`. No OpenAI / Anthropic API keys are required for production runs - every model is local.
 
 ### Environment Variables (`.env`)
 ```bash
 # Model selection (Qwen3-8B in production, 0.5B-Instruct for dev iteration)
 QWEN_MODEL_ID=Qwen/Qwen3-8B
 
-# Optional — Hugging Face token to avoid download rate limits
+# Optional - Hugging Face token to avoid download rate limits
 HF_TOKEN=hf_...
 
 # CORS allow-list for the frontend (comma-separated, or "*" for any origin)
@@ -1522,10 +1522,10 @@ The system is fully self-contained. No outbound API calls happen at inference ti
 ## 16. Design Decisions
 
 **Why adversarial debate instead of single-agent?**
-Legal compliance is inherently adversarial — courts hear both sides before ruling. Single-agent evaluators anchor on superficial language matches. Debate forces the system to surface and resolve contradictions. Grounded in Du et al. 2023.
+Legal compliance is inherently adversarial - courts hear both sides before ruling. Single-agent evaluators anchor on superficial language matches. Debate forces the system to surface and resolve contradictions. Grounded in Du et al. 2023.
 
 **Why Qwen3-8B locally?**
-Three reasons: (1) thinking traces are visible, loggable, and a research artifact; (2) enables the think ON/OFF ablation impossible with black-box APIs; (3) zero marginal cost per evaluation run — critical for reproducibility.
+Three reasons: (1) thinking traces are visible, loggable, and a research artifact; (2) enables the think ON/OFF ablation impossible with black-box APIs; (3) zero marginal cost per evaluation run - critical for reproducibility.
 
 **Why one Chroma vector per article (not chunked)?**
 All 10 GDPR focus articles fit within 700 tokens. Chunking splits legal reasoning mid-paragraph. One article = one vector = unambiguous source ID on every retrieved result.
@@ -1537,7 +1537,7 @@ Zero infrastructure. ~3000 log rows for a full evaluation run. Fully portable. T
 RAFT preserves the model's general legal reasoning while teaching it domain-specific compliance patterns. Standard fine-tuning on a small dataset risks catastrophic forgetting. RAFT uses the pipeline's own output (debate transcripts) as training signal, creating a self-improving loop.
 
 **Why exclude GDPR+HIPAA and HIPAA+SOC2?**
-GDPR Art. 17 (erasure) directly contradicts HIPAA §164.530(j) (retention minimums for medical records — 6 years). Attempting joint evaluation would produce contradictory verdicts with no clear resolution. Cleaner to evaluate against each regulation independently and surface conflicts as a warning rather than a joint score.
+GDPR Art. 17 (erasure) directly contradicts HIPAA §164.530(j) (retention minimums for medical records - 6 years). Attempting joint evaluation would produce contradictory verdicts with no clear resolution. Cleaner to evaluate against each regulation independently and surface conflicts as a warning rather than a joint score.
 
 ---
 
@@ -1575,11 +1575,11 @@ The backend exposes a versioned REST API at `/api/v1/*` consumed by the React/Ne
 # Dev (auto-reload):
 uvicorn backend.api.main:app --reload --port 8000
 
-# Prod (single process — Qwen3-8B is the bottleneck, not the HTTP layer):
+# Prod (single process - Qwen3-8B is the bottleneck, not the HTTP layer):
 uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-The first `/analyze` request loads `Qwen3-8B` into memory (~16 GB FP16 / ~6 GB 4-bit). Subsequent requests reuse the singleton — keep the worker count at 1 unless you have multi-GPU hardware.
+The first `/analyze` request loads `Qwen3-8B` into memory (~16 GB FP16 / ~6 GB 4-bit). Subsequent requests reuse the singleton - keep the worker count at 1 unless you have multi-GPU hardware.
 
 ### 19.2 Endpoints
 
@@ -1609,9 +1609,9 @@ The first `/analyze` request loads `Qwen3-8B` into memory (~16 GB FP16 / ~6 GB 4
 }
 ```
 
-**`POST /api/v1/analyze`** — `multipart/form-data` with a single `file` field. Optional query param `thinking=false` for the C4-nothink ablation. Accepted MIME types: `.pdf`, `.docx`, `.txt`.
+**`POST /api/v1/analyze`** - `multipart/form-data` with a single `file` field. Optional query param `thinking=false` for the C4-nothink ablation. Accepted MIME types: `.pdf`, `.docx`, `.txt`.
 
-Response (synchronous; long-running — typical latency 6–8 minutes per document on Qwen3-8B):
+Response (synchronous; long-running - typical latency 6–8 minutes per document on Qwen3-8B):
 ```json
 {
   "doc_id": "a3f1b2c4d5e6",
@@ -1628,11 +1628,11 @@ Response (synchronous; long-running — typical latency 6–8 minutes per docume
 }
 ```
 
-**`GET /api/v1/reports/{doc_id}`** — full `ViolationReport` (see Section 8). Use this to render the dashboard / per-article table.
+**`GET /api/v1/reports/{doc_id}`** - full `ViolationReport` (see Section 8). Use this to render the dashboard / per-article table.
 
-**`GET /api/v1/reports/{doc_id}/{assessment|remediation}`** — `application/pdf` download. The filename is `{doc_stem}_{kind}_{doc_id}.pdf`.
+**`GET /api/v1/reports/{doc_id}/{assessment|remediation}`** - `application/pdf` download. The filename is `{doc_stem}_{kind}_{doc_id}.pdf`.
 
-**`GET /api/v1/reports`** — paginated list (currently unbounded — frontend should add client-side filters):
+**`GET /api/v1/reports`** - paginated list (currently unbounded - frontend should add client-side filters):
 ```json
 {
   "reports": [
@@ -1654,7 +1654,7 @@ Response (synchronous; long-running — typical latency 6–8 minutes per docume
 |---|---|
 | `400` | Unsupported file type, malformed multipart, missing `file` field |
 | `404` | `doc_id` not found in `outputs/reports/` |
-| `500` | Pipeline failure — check `outputs/pipeline_logs.db` for the run_id |
+| `500` | Pipeline failure - check `outputs/pipeline_logs.db` for the run_id |
 
 All error bodies follow FastAPI's default shape: `{"detail": "<message>"}`.
 
@@ -1670,7 +1670,7 @@ All error bodies follow FastAPI's default shape: `{"detail": "<message>"}`.
 6. GET  /api/v1/reports            → "Recent runs" sidebar
 ```
 
-Long-running uploads are the only sharp edge. Recommended UX: show a determinate progress bar fed by the typical 6–8 min budget (the backend does not currently stream incremental progress — adding SSE/WebSocket is a future enhancement listed in Section 21).
+Long-running uploads are the only sharp edge. Recommended UX: show a determinate progress bar fed by the typical 6–8 min budget (the backend does not currently stream incremental progress - adding SSE/WebSocket is a future enhancement listed in Section 21).
 
 ### 19.6 Sample fetch
 
@@ -1694,22 +1694,22 @@ async function analyze(file: File, thinking = true) {
 For the engineer picking up backend integration / building the frontend.
 
 ### 20.1 What's done
-- Full LangGraph pipeline (Classifier → Retrieval → Debate → Reporter, with optional Drift) — `backend/graph.py`.
-- FastAPI layer with all endpoints listed in Section 19 — `backend/api/`.
+- Full LangGraph pipeline (Classifier → Retrieval → Debate → Reporter, with optional Drift) - `backend/graph.py`.
+- FastAPI layer with all endpoints listed in Section 19 - `backend/api/`.
 - Three regulation indexes (GDPR, HIPAA, NIST) loaded into `data/chroma_db/`.
-- POA&M PDF generation via Jinja2 + xhtml2pdf — `backend/reports/`.
-- Drift detection with Semantic Regression Score — `backend/drift/detector.py`.
-- Adversarial debate protocol with cite-then-verify hallucination guard — `backend/debate/protocol.py`.
-- Evaluation harness + 6-table presentation report — `scripts/evaluate_semantic.py`, `scripts/generate_tables.py`, `outputs/POA&M/EVALUATION_TABLES.pdf`.
-- Pipeline logging to SQLite (every prompt, thinking trace, response) — `outputs/pipeline_logs.db`.
+- POA&M PDF generation via Jinja2 + xhtml2pdf - `backend/reports/`.
+- Drift detection with Semantic Regression Score - `backend/drift/detector.py`.
+- Adversarial debate protocol with cite-then-verify hallucination guard - `backend/debate/protocol.py`.
+- Evaluation harness + 6-table presentation report - `scripts/evaluate_semantic.py`, `scripts/generate_tables.py`, `outputs/POA&M/EVALUATION_TABLES.pdf`.
+- Pipeline logging to SQLite (every prompt, thinking trace, response) - `outputs/pipeline_logs.db`.
 
 ### 20.2 What's not yet done (good first issues)
-- **Frontend** — `frontend/` is empty. Suggested stack: Next.js + Tailwind + shadcn/ui. The API contract in Section 19 is stable.
-- **Streaming progress** — `/analyze` is synchronous. Add Server-Sent Events keyed by `run_id` so the UI can show debate-round-by-debate-round progress.
-- **Auth** — none today. Add a token-based middleware before deploying beyond localhost.
-- **SOC 2 / ISO 27001 indexing** — the `data/compliance/{soc2,iso27001}/` directories and `test_datasets/{soc2,gdpr_soc2_combined,hipaa_soc2_combined}/` are placeholders. Drop in `*_articles.json` and run `scripts/index_regulations.py --regulation <reg>`.
-- **Multi-doc batching endpoint** — `POST /api/v1/analyze/batch` accepting multiple files would help auditors evaluate a doc set in one call.
-- **Background workers** — Qwen3-8B is the bottleneck. Move `/analyze` onto a Celery / RQ worker queue once load justifies it.
+- **Frontend** - `frontend/` is empty. Suggested stack: Next.js + Tailwind + shadcn/ui. The API contract in Section 19 is stable.
+- **Streaming progress** - `/analyze` is synchronous. Add Server-Sent Events keyed by `run_id` so the UI can show debate-round-by-debate-round progress.
+- **Auth** - none today. Add a token-based middleware before deploying beyond localhost.
+- **SOC 2 / ISO 27001 indexing** - the `data/compliance/{soc2,iso27001}/` directories and `test_datasets/{soc2,gdpr_soc2_combined,hipaa_soc2_combined}/` are placeholders. Drop in `*_articles.json` and run `scripts/index_regulations.py --regulation <reg>`.
+- **Multi-doc batching endpoint** - `POST /api/v1/analyze/batch` accepting multiple files would help auditors evaluate a doc set in one call.
+- **Background workers** - Qwen3-8B is the bottleneck. Move `/analyze` onto a Celery / RQ worker queue once load justifies it.
 
 ### 20.3 Local bring-up (10 minutes on Apple Silicon / 5 minutes on a CUDA box)
 
@@ -1725,7 +1725,7 @@ python run_pipeline.py --doc test_datasets/gdpr/articles/gdpr_compliant_streamvi
 # Start the backend
 uvicorn backend.api.main:app --reload --port 8000
 
-# In another shell — verify the frontend's first three calls
+# In another shell - verify the frontend's first three calls
 curl -s http://localhost:8000/api/v1/health | jq
 curl -s http://localhost:8000/api/v1/regulations | jq
 curl -s -F "file=@test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf" \
@@ -1745,9 +1745,9 @@ curl -s -F "file=@test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf" \
 
 ### 20.5 Files the frontend never needs to touch
 
-- Anything under `data/`, `outputs/`, `test_datasets/` — generated or evaluation-only.
-- `scripts/*` — research-evaluation utilities, not part of production runtime.
-- `run_evaluation.py` — superseded for results reporting by `scripts/evaluate_semantic.py` + `scripts/generate_tables.py`.
+- Anything under `data/`, `outputs/`, `test_datasets/` - generated or evaluation-only.
+- `scripts/*` - research-evaluation utilities, not part of production runtime.
+- `run_evaluation.py` - superseded for results reporting by `scripts/evaluate_semantic.py` + `scripts/generate_tables.py`.
 
 ---
 
@@ -1756,6 +1756,6 @@ curl -s -F "file=@test_datasets/gdpr/articles/gdpr_compliant_streamvibe.pdf" \
 - Server-Sent Events for incremental debate progress on `/analyze`.
 - Authentication + per-user report scoping.
 - Background worker queue (Celery / RQ) for long-running pipelines.
-- SOC 2, ISO 27001, PCI-DSS indexing — the registry pattern in `backend/agents/classifier.py` is designed to absorb these.
+- SOC 2, ISO 27001, PCI-DSS indexing - the registry pattern in `backend/agents/classifier.py` is designed to absorb these.
 - RAFT fine-tuning of the Arbiter once 500+ high-confidence debate records have accumulated (see Section 10.3).
 - A ground-truth annotation UI replacing the current PDF-based annotator workflow.
