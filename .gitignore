@@ -31,3 +31,6 @@ models/
 
 # HuggingFace cache
 .cache/
+
+# Session exports
+*-this-session-*.txt
