@@ -1,5 +1,7 @@
 # Agentic AI Compliance Monitoring System
 
+[![Watch the demo on YouTube](https://img.shields.io/badge/YouTube-Watch%20demo-FF0000?logo=youtube&logoColor=white&style=for-the-badge)](https://youtu.be/RZcnRnm9KA4)
+
 An AI-powered compliance audit platform that evaluates enterprise documents - privacy policies, security SOPs, vendor agreements, breach-response procedures - against **GDPR**, **HIPAA**, and **NIST SP 800-53**. The system produces audit-ready POA&M (Plan of Action and Milestones) reports, the same format used by real enterprise compliance teams, and continuously monitors for compliance drift as both regulations and internal documents evolve.
 
 Every model runs locally. Zero marginal cost per audit. Full reasoning traces captured for every verdict.
@@ -185,3 +187,9 @@ python scripts/generate_tables.py
 - [`architecture.md`](./architecture.md) - Step-by-step system walkthrough with diagrams.
 - [`spec.md` Section 19](./spec.md) - Frontend integration and full API contract.
 - [`spec.md` Section 20](./spec.md) - Teammate handoff runbook (local bring-up, code touch-points, open items).
+
+---
+
+## Team
+
+Pravin Raj Senguttuvan  ·  Kishore Kumar Jayaraj  ·  Prabhakaran Palanimuthu  ·  Satyam Dubey
