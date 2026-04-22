@@ -1,9 +1,11 @@
 """Evaluation metrics: Precision, Recall, F1, Cohen's Kappa.
 
 Binary classification: Full = compliant (positive), Partial/Missing = non-compliant (negative).
+Multiclass (Full/Partial/Missing): macro-F1, per-class P/R/F1, multi-class Cohen's kappa.
 """
 
 from collections import Counter
+from typing import Any
 
 
 def compute_metrics(predictions: dict, ground_truth: dict) -> dict:
@@ -71,6 +73,149 @@ def compute_hallucination_rate(debate_records: list[dict]) -> dict:
         "total_evaluations": total,
         "hallucination_flags": flagged,
         "hallucination_rate": round(rate, 4),
+    }
+
+
+LABELS_THREE = ("Full", "Partial", "Missing")
+
+
+def _normalize_label(lbl: Any) -> str:
+    """Coerce any input into one of Full/Partial/Missing (case-insensitive)."""
+    if isinstance(lbl, dict):
+        lbl = lbl.get("label", "Missing")
+    if not isinstance(lbl, str):
+        return "Missing"
+    s = lbl.strip().lower()
+    if s.startswith("full"):
+        return "Full"
+    if s.startswith("part"):
+        return "Partial"
+    return "Missing"
+
+
+def compute_multiclass_metrics(
+    predictions: dict,
+    ground_truth: dict,
+    labels: tuple[str, ...] = LABELS_THREE,
+) -> dict:
+    """Per-class precision/recall/F1 + macro-F1 + multi-class Cohen's kappa.
+
+    Args:
+        predictions:   flat ``{article_id: label}`` (label is Full/Partial/Missing).
+        ground_truth:  flat ``{article_id: label}`` *or* ``{article_id: {label: ...}}``.
+        labels:        ordered tuple of class labels.
+
+    Returns:
+        Dict with ``macro_f1``, ``cohens_kappa``, ``accuracy``, ``support``,
+        ``per_class`` (per-label precision/recall/f1/support) and the confusion matrix.
+    """
+    gt_map = {k: _normalize_label(v) for k, v in (ground_truth or {}).items()}
+    pred_map = {k: _normalize_label(v) for k, v in (predictions or {}).items()}
+
+    # Score only on comparable items (intersection). This avoids penalizing
+    # non-evaluated articles as implicit "Missing", which can badly skew recall.
+    overlap_ids = sorted(set(gt_map.keys()) & set(pred_map.keys()))
+    missing_in_pred = sorted(set(gt_map.keys()) - set(pred_map.keys()))
+    extra_in_pred = sorted(set(pred_map.keys()) - set(gt_map.keys()))
+
+    y_true: list[str] = [gt_map[i] for i in overlap_ids]
+    y_pred: list[str] = [pred_map[i] for i in overlap_ids]
+
+    if not y_true:
+        return {
+            "support": 0,  # number of overlapped article ids
+            "macro_f1": None,
+            "cohens_kappa": None,
+            "accuracy": None,
+            "per_class": {lbl: None for lbl in labels},
+            "confusion_matrix": None,
+            "labels": list(labels),
+            "coverage": {
+                "ground_truth_total": len(gt_map),
+                "predictions_total": len(pred_map),
+                "overlap_total": 0,
+                "missing_in_predictions": len(missing_in_pred),
+                "extra_predictions": len(extra_in_pred),
+            },
+            "missing_in_predictions": missing_in_pred,
+            "extra_predictions": extra_in_pred,
+        }
+
+    try:
+        from sklearn.metrics import (
+            precision_recall_fscore_support,
+            cohen_kappa_score,
+            accuracy_score,
+            confusion_matrix,
+        )
+    except ImportError:
+        return {
+            "support": len(y_true),
+            "macro_f1": None,
+            "cohens_kappa": None,
+            "accuracy": None,
+            "per_class": {lbl: None for lbl in labels},
+            "confusion_matrix": None,
+            "labels": list(labels),
+            "error": "scikit-learn not installed",
+            "coverage": {
+                "ground_truth_total": len(gt_map),
+                "predictions_total": len(pred_map),
+                "overlap_total": len(overlap_ids),
+                "missing_in_predictions": len(missing_in_pred),
+                "extra_predictions": len(extra_in_pred),
+            },
+            "missing_in_predictions": missing_in_pred,
+            "extra_predictions": extra_in_pred,
+        }
+
+    p, r, f, s = precision_recall_fscore_support(
+        y_true, y_pred, labels=list(labels), zero_division=0
+    )
+    macro_f1 = float(f.mean()) if len(f) else 0.0
+    # Cohen's kappa is not meaningful in degenerate single-class truth/pred
+    # distributions; return None instead of a misleading 0.0.
+    true_unique = len(set(y_true))
+    pred_unique = len(set(y_pred))
+    if true_unique < 2 or pred_unique < 2:
+        kappa = None
+    else:
+        kappa = float(cohen_kappa_score(y_true, y_pred, labels=list(labels)))
+    acc = float(accuracy_score(y_true, y_pred))
+    cm = confusion_matrix(y_true, y_pred, labels=list(labels)).tolist()
+
+    per_class = {
+        labels[i]: {
+            "precision": round(float(p[i]), 3),
+            "recall": round(float(r[i]), 3),
+            "f1": round(float(f[i]), 3),
+            "support": int(s[i]),
+        }
+        for i in range(len(labels))
+    }
+
+    return {
+        "support": len(y_true),
+        "macro_f1": round(macro_f1, 3),
+        "cohens_kappa": round(kappa, 3) if kappa is not None else None,
+        "accuracy": round(acc, 3),
+        "per_class": per_class,
+        "confusion_matrix": cm,
+        "labels": list(labels),
+        "coverage": {
+            "ground_truth_total": len(gt_map),
+            "predictions_total": len(pred_map),
+            "overlap_total": len(overlap_ids),
+            "missing_in_predictions": len(missing_in_pred),
+            "extra_predictions": len(extra_in_pred),
+        },
+        "missing_in_predictions": missing_in_pred,
+        "extra_predictions": extra_in_pred,
+        "kappa_note": (
+            "Undefined for single-class distributions"
+            if kappa is None
+            else None
+        ),
     }
 
 

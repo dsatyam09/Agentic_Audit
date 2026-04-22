@@ -1,4 +1,4 @@
-# Agentic Audit — System Architecture
+# Agentic Audit - System Architecture
 
 ## What the system does
 
@@ -10,11 +10,11 @@ Given an enterprise document (PDF, DOCX, or TXT), the system:
 5. Optionally tracks how compliance has changed since a previous audit (drift detection)
 6. Produces two PDF reports: a full Assessment Report and an actionable Remediation Report
 
-Everything runs locally — no OpenAI API, no external calls, zero cost per run.
+Everything runs locally - no OpenAI API, no external calls, zero cost per run.
 
 ---
 
-## How a PDF gets evaluated — answering the key question
+## How a PDF gets evaluated - answering the key question
 
 **Does submitting a PDF check against all three regulations at once?**
 
@@ -40,7 +40,7 @@ Retrieval + Debate only runs against the assigned regulation(s)
 POA&M reports reference only the relevant regulatory framework
 ```
 
-**HIPAA + GDPR are mutually exclusive** — they have conflicting data-retention and
+**HIPAA + GDPR are mutually exclusive** - they have conflicting data-retention and
 consent rules. If the classifier assigns both, the system keeps only the one that
 best matches the document type. NIST can coexist with either GDPR or HIPAA.
 
@@ -158,7 +158,7 @@ Input Document (PDF / DOCX / TXT)
           │  retrieved_clauses: top-5 regulation articles per chunk
           ▼
    ┌─────────────┐
-   │   DEBATE    │  for each (chunk, article) pair — 3 sequential Qwen calls:
+   │   DEBATE    │  for each (chunk, article) pair - 3 sequential Qwen calls:
    │             │    Advocate → Challenger → Arbiter + hallucination guard
    └──────┬──────┘
           │  debate_records: verdict + risk_level + thinking traces per article
@@ -202,7 +202,7 @@ ComplianceState
 
 ## Step-by-step detail
 
-### Step 1 — Ingestion (before the graph)
+### Step 1 - Ingestion (before the graph)
 
 ```
 DocumentParser.parse(doc_path)
@@ -216,7 +216,7 @@ DocumentChunker.chunk(doc_text)
 └── returns [{chunk_index, chunk_text, char_start, char_end}]
 ```
 
-### Step 2 — Classifier
+### Step 2 - Classifier
 
 ```
 doc_text[:1500] + filename
@@ -237,7 +237,7 @@ doc_text[:1500] + filename
 | breach_sop | hipaa |
 | other | gdpr |
 
-### Step 3 — Retrieval
+### Step 3 - Retrieval
 
 ```
 For each chunk × each regulation in scope:
@@ -250,16 +250,16 @@ For each chunk × each regulation in scope:
 Two-stage retrieval: ANN is fast but imprecise; cross-encoder reads both texts
 together for much higher relevance precision.
 
-### Step 4 — Debate (core of the system)
+### Step 4 - Debate (core of the system)
 
-For every `(chunk_text, article)` pair — 3 sequential Qwen calls:
+For every `(chunk_text, article)` pair - 3 sequential Qwen calls:
 
 ```
-ADVOCATE   — find every way the policy satisfies the requirement
+ADVOCATE   - find every way the policy satisfies the requirement
     ↓           (thinking=True, <think> trace captured)
-CHALLENGER — find every gap, ambiguity, omission in the advocate's argument
+CHALLENGER - find every gap, ambiguity, omission in the advocate's argument
     ↓           (sees full advocate output, thinking=True)
-ARBITER    — weigh both sides, issue final verdict
+ARBITER    - weigh both sides, issue final verdict
     ↓           (thinking=True)
 HALLUCINATION GUARD
     └─ if verdict ∈ {Full, Partial} and cited_text not verbatim in chunk → flag + downgrade
@@ -268,7 +268,7 @@ HALLUCINATION GUARD
 **Verdict options:** Full / Partial / Missing
 **Risk levels:** Critical / High / Medium / Low
 
-### Step 5 — Reporter
+### Step 5 - Reporter
 
 ```
 1. Deduplicate: per article_id keep the BEST verdict (Full > Partial > Missing)
@@ -280,7 +280,7 @@ HALLUCINATION GUARD
 5. violation_report.json written to outputs/reports/{doc_id}/raw/
 ```
 
-### Step 6 — Drift (optional)
+### Step 6 - Drift (optional)
 
 ```
 SRS = coverage_rank_drop × risk_weight × (1 + cosine_distance(cited_v1, cited_v2))

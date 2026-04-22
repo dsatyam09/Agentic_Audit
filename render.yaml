@@ -1,0 +1,33 @@
+# Render.com — Web Service (Docker)
+# https://render.com/docs/yaml-spec
+#
+# Prerequisites:
+# - Push this repo to GitHub/GitLab and connect it in Render.
+# - Optional: set HF_TOKEN in the Render dashboard if Hugging Face rate-limits model pulls.
+#
+# The first deploy builds the React UI, indexes regulations into Chroma (CPU + time),
+# and starts FastAPI. Qwen3-8B and other heavy models load on first /analyze request.
+
+services:
+  - type: web
+    name: agentic-audit
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: HF_HOME
+        value: /app/.cache/huggingface
+      - key: DISABLE_RAGAS
+        value: "1"
+      - key: QWEN_MODEL_ID
+        value: Qwen/Qwen2.5-0.5B-Instruct
+    # Optional: attach a disk and mount at /app/outputs to retain PDFs across restarts
+    # disk:
+    #   name: audit-outputs
+    #   mountPath: /app/outputs
+    #   sizeGB: 5

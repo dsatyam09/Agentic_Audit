@@ -156,7 +156,12 @@ def _generate_remediations(
     )
 
     prompt = REMEDIATION_PROMPT.format(violations_json=violations_json)
-    result = qwen_runner.generate(prompt, thinking=True, max_new_tokens=2048)
+    reporter_max_new_tokens = int(os.environ.get("REPORTER_MAX_NEW_TOKENS", "512"))
+    result = qwen_runner.generate(
+        prompt,
+        thinking=True,
+        max_new_tokens=reporter_max_new_tokens,
+    )
 
     # Parse the JSON response
     remediation_map: dict[str, str] = {}
@@ -239,6 +244,21 @@ def generate_poam(
 # Build violation report
 # ---------------------------------------------------------------------------
 
+def _row_display_risk(verdict: str, regulatory_risk: str) -> str:
+    """Verdict-aware risk for reports/UI: Full should not read as High by default.
+
+    ``regulatory_risk`` is the article importance band from the arbiter / RAG clause
+    metadata (Critical/High/Medium/Low). The displayed band reflects **residual
+    exposure** given coverage.
+    """
+    reg = regulatory_risk if regulatory_risk in ("Critical", "High", "Medium", "Low") else "Medium"
+    if verdict == "Full":
+        return "Low"
+    if verdict == "Partial":
+        return {"Critical": "High", "High": "Medium", "Medium": "Medium", "Low": "Low"}.get(reg, "Medium")
+    return reg
+
+
 def _build_violation_report(
     canonical_records: list[dict],
     risk_score: float,
@@ -263,7 +283,10 @@ def _build_violation_report(
             "article_title": rec["article_title"],
             "regulation": rec["regulation"],
             "verdict": rec["verdict"],
-            "risk_level": rec["risk_level"],
+            # Statutory / article weight (from debate + regulation metadata)
+            "article_priority": rec["risk_level"],
+            # Residual exposure given verdict — clearer for readers than raw priority alone
+            "risk_level": _row_display_risk(rec["verdict"], rec["risk_level"]),
             "reasoning": rec["reasoning"],
             "final_cited_text": rec.get("final_cited_text"),
             "debate_summary": rec.get("debate_summary", ""),

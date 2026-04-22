@@ -11,7 +11,14 @@ import json
 import argparse
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# So HF_TOKEN and other vars from the repo root `.env` apply (same as run_pipeline.py).
+load_dotenv(PROJECT_ROOT / ".env")
+
+# Install Hub auth + suppress spurious X-HF-Warning logs before any model import.
+import backend.hf_setup  # noqa: F401
 
 
 def index_regulation(regulation: str) -> None:

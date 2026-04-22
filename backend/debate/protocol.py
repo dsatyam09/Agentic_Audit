@@ -8,6 +8,7 @@ before returning a fully populated DebateRecord.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
@@ -193,7 +194,12 @@ def run_debate(
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    advocate_raw = qwen_runner.generate(advocate_prompt, thinking=True)
+    debate_max_new_tokens = int(os.environ.get("DEBATE_MAX_NEW_TOKENS", "256"))
+    advocate_raw = qwen_runner.generate(
+        advocate_prompt,
+        thinking=True,
+        max_new_tokens=debate_max_new_tokens,
+    )
     advocate_parsed = safe_parse_json(advocate_raw["response"])
 
     advocate_argument = advocate_parsed.get("argument", advocate_raw["response"])
@@ -210,7 +216,11 @@ def run_debate(
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    challenger_raw = qwen_runner.generate(challenger_prompt, thinking=True)
+    challenger_raw = qwen_runner.generate(
+        challenger_prompt,
+        thinking=True,
+        max_new_tokens=debate_max_new_tokens,
+    )
     challenger_parsed = safe_parse_json(challenger_raw["response"])
 
     challenger_argument = challenger_parsed.get(
@@ -230,7 +240,11 @@ def run_debate(
         clause_text=clause_text,
         policy_chunk=chunk_text,
     )
-    arbiter_raw = qwen_runner.generate(arbiter_prompt, thinking=True)
+    arbiter_raw = qwen_runner.generate(
+        arbiter_prompt,
+        thinking=True,
+        max_new_tokens=debate_max_new_tokens,
+    )
     arbiter_parsed = safe_parse_json(arbiter_raw["response"])
 
     verdict = arbiter_parsed.get("coverage", "Missing")
@@ -244,9 +258,23 @@ def run_debate(
         else:
             verdict = "Missing"
 
-    risk_level = arbiter_parsed.get("risk_level", clause.get("severity", "High"))
-    if risk_level not in ("Critical", "High", "Medium", "Low"):
-        risk_level = "High"
+    _LEVELS = ("Critical", "High", "Medium", "Low")
+
+    def _normalize_risk_level(raw: object, default: str | None) -> str | None:
+        if raw is None or not isinstance(raw, str):
+            return default
+        t = raw.strip().title()
+        if t in _LEVELS:
+            return t
+        low = raw.strip().lower()
+        return {"critical": "Critical", "high": "High", "medium": "Medium", "low": "Low"}.get(low)
+
+    risk_level = _normalize_risk_level(arbiter_parsed.get("risk_level"), None)
+    if risk_level is None:
+        # Fall back to regulatory article severity from RAG metadata (not a blanket "High").
+        risk_level = _normalize_risk_level(clause.get("severity"), "Medium")
+    if risk_level is None:
+        risk_level = "Medium"
 
     reasoning = arbiter_parsed.get("reasoning", "")
     final_cited_text = arbiter_parsed.get("cited_text")

@@ -11,6 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+import backend.hf_setup  # noqa: F401 — load `.env` + HF auth before Hub access
+from backend.hf_setup import hub_auth_token
+
 from sentence_transformers import CrossEncoder
 
 _MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -29,7 +32,7 @@ class Reranker:
 
     def _load_model(self) -> CrossEncoder:
         if self._model is None:
-            self._model = CrossEncoder(self._model_name)
+            self._model = CrossEncoder(self._model_name, token=hub_auth_token())
         return self._model
 
     # ------------------------------------------------------------------
