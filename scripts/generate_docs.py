@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description="Generate synthetic test documents")
-    parser.add_argument("--regulation", required=True, choices=["gdpr", "hipaa", "nist"])
+    parser.add_argument("--regulation", required=True, choices=["gdpr", "soc2", "hipaa"])
     parser.add_argument("--count", type=int, default=5, help="Number of docs per category")
     args = parser.parse_args()
 

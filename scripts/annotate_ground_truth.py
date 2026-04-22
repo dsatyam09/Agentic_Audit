@@ -9,16 +9,17 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 
-from backend.agents.classifier import REGULATION_REGISTRY
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+GDPR_ARTICLES = ["art_5", "art_6", "art_7", "art_13", "art_14",
+                  "art_17", "art_25", "art_32", "art_33", "art_44"]
 
 LABELS = ["Full", "Partial", "Missing"]
 
 
 def main():
     parser = argparse.ArgumentParser(description="Create ground truth annotations")
-    parser.add_argument("--regulation", required=True, choices=list(REGULATION_REGISTRY.keys()))
+    parser.add_argument("--regulation", required=True, choices=["gdpr", "soc2", "hipaa"])
     parser.add_argument("--doc-id", required=True, help="Document ID (e.g., nc_001)")
     parser.add_argument("--doc-path", default=None, help="Path to the document")
     args = parser.parse_args()
@@ -26,15 +27,16 @@ def main():
     gt_path = PROJECT_ROOT / "data" / "testing" / "ground_truth" / f"{args.regulation}_annotations.json"
     gt_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Load existing annotations
     existing = []
     if gt_path.exists():
         with open(gt_path) as f:
             existing = json.load(f)
 
-    articles = REGULATION_REGISTRY[args.regulation]["focus_articles"]
+    articles = GDPR_ARTICLES  # TODO: extend for soc2, hipaa
 
     print(f"Annotating {args.doc_id} against {args.regulation}")
-    print("Labels: Full | Partial | Missing")
+    print(f"Labels: Full | Partial | Missing")
     print()
 
     annotations = {}
@@ -42,7 +44,7 @@ def main():
         while True:
             label = input(f"  {art_id}: ").strip()
             if label in LABELS:
-                notes = input("    Notes: ").strip()
+                notes = input(f"    Notes: ").strip()
                 annotations[art_id] = {"label": label, "notes": notes}
                 break
             print(f"    Invalid. Choose from: {', '.join(LABELS)}")
@@ -57,6 +59,7 @@ def main():
         "agreed_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
     }
 
+    # Update or append
     found = False
     for i, e in enumerate(existing):
         if e["doc_id"] == args.doc_id:

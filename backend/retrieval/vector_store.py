@@ -38,7 +38,7 @@ _DEFAULT_PERSIST_DIR = str(_REPO_ROOT / "data" / "chroma_db")
 class VectorStore:
     """Thin wrapper around ChromaDB that organises embeddings by namespace.
 
-    Each *namespace* (e.g. ``"gdpr"``, ``"hipaa"``, ``"nist"``) maps to a
+    Each *namespace* (e.g. ``"gdpr"``, ``"soc2"``, ``"hipaa"``) maps to a
     separate ChromaDB collection, keeping regulation data cleanly isolated.
     """
 

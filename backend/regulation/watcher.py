@@ -45,12 +45,12 @@ REGULATION_SOURCES: dict[str, dict[str, Any]] = {
         "url": "https://gdpr-info.eu/",
         "check_interval_hours": 24,
     },
-    "hipaa": {
-        "url": "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html",
+    "soc2": {
+        "url": "https://www.aicpa.org/topic/audit-assurance/audit-and-assurance-greater-than-soc-2",
         "check_interval_hours": 168,
     },
-    "nist": {
-        "url": "https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final",
+    "hipaa": {
+        "url": "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html",
         "check_interval_hours": 168,
     },
 }

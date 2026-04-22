@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import hashlib
 
+import backend.hf_setup  # noqa: F401 — load `.env` + HF auth before Hub access
+from backend.hf_setup import hub_auth_token
+
 from sentence_transformers import SentenceTransformer
 
 _MODEL = "all-MiniLM-L6-v2"
@@ -26,7 +29,7 @@ class Embedder:
 
     def __init__(self, model: str = _MODEL) -> None:
         self._model_name = model
-        self._model = SentenceTransformer(model)
+        self._model = SentenceTransformer(model, token=hub_auth_token())
         self._cache: dict[str, list[float]] = {}
 
     # ------------------------------------------------------------------
